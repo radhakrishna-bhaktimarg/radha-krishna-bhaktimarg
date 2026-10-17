@@ -30,6 +30,18 @@ const hasCompleteLanguageContent = (languageContent, questionCount) =>
       languageContent.questions.length === questionCount,
   );
 
+const isFallbackLanguageContent = (languageContent, sourceContent) =>
+  languageContent?.title === sourceContent.title &&
+  languageContent?.content === sourceContent.content &&
+  languageContent.questions?.every(
+    (question, index) =>
+      question.question === sourceContent.questions[index]?.question &&
+      question.options?.every(
+        (option, optionIndex) =>
+          option === sourceContent.questions[index]?.options[optionIndex],
+      ),
+  );
+
 // -------------------------------------------------------------
 // @route   GET /api/quiz/today-katha
 // -------------------------------------------------------------
@@ -54,20 +66,23 @@ router.get("/today-katha", protect, async (req, res) => {
       devotee.lastQuizDate === today && (devotee.dailyQuizAttempts || 0) >= 1;
 
     const languages = katha.languages || {};
+    const sourceContent = {
+      title: katha.title,
+      content: katha.content,
+      questions: katha.questions || [],
+    };
     const translationCodes = ["en", "mr", "sa"];
     const missingTranslations = translationCodes.some(
       (code) =>
         !hasCompleteLanguageContent(
           languages[code],
-          (katha.questions || []).length,
-        ),
+          sourceContent.questions.length,
+        ) || isFallbackLanguageContent(languages[code], sourceContent),
     );
 
     if (missingTranslations) {
       const generatedLanguages = await autoTranslateKathaAndQuestions({
-        title: katha.title,
-        content: katha.content,
-        questions: katha.questions || [],
+        ...sourceContent,
       });
 
       katha = await Katha.findByIdAndUpdate(
