@@ -5,15 +5,10 @@ const configuredBackendUrl =
   import.meta.env.VITE_API_URL || import.meta.env.VITE_API_BASE_URL;
 const productionBackendUrl =
   "https://radha-krishna-bhaktimarg-s3vn.vercel.app";
-const configuredIsLocalhost = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?/i.test(
-  configuredBackendUrl || "",
-);
 const BACKEND_URL = (
   import.meta.env.DEV && configuredBackendUrl
     ? configuredBackendUrl
-    : configuredBackendUrl && !configuredIsLocalhost
-      ? configuredBackendUrl
-      : productionBackendUrl
+    : productionBackendUrl
 )
   .replace(/\/+$/, "")
   .replace(/\/api$/, "");
