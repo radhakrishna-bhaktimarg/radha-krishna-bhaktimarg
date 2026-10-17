@@ -27,7 +27,14 @@ const hasCompleteLanguageContent = (languageContent, questionCount) =>
     languageContent?.title &&
       languageContent?.content &&
       Array.isArray(languageContent.questions) &&
-      languageContent.questions.length === questionCount,
+      languageContent.questions.length === questionCount &&
+      languageContent.questions.every(
+        (question) =>
+          question?.question &&
+          Array.isArray(question.options) &&
+          question.options.length > 0 &&
+          question.options.every(Boolean),
+      ),
   );
 
 const isFallbackLanguageContent = (languageContent, sourceContent) =>

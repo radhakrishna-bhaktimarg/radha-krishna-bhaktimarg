@@ -1,14 +1,31 @@
 const { translate } = require("@vitalets/google-translate-api");
 
+const sleep = (milliseconds) =>
+  new Promise((resolve) => setTimeout(resolve, milliseconds));
+
 const translateText = async (text, targetLang) => {
   if (!text || !text.trim()) return "";
-  try {
-    const res = await translate(text, { to: targetLang });
-    return res.text;
-  } catch (err) {
-    console.error(`Translation error for ${targetLang}:`, err.message);
-    return text;
+
+  let lastError;
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    try {
+      const res = await translate(text, { to: targetLang });
+      if (res.text && res.text.trim()) {
+        return res.text;
+      }
+      lastError = new Error("Translation provider returned an empty response");
+    } catch (err) {
+      lastError = err;
+    }
+
+    if (attempt < 3) {
+      await sleep(attempt * 500);
+    }
   }
+
+  throw new Error(
+    `Translation failed for ${targetLang}: ${lastError?.message || "empty response"}`,
+  );
 };
 
 const autoTranslateKathaAndQuestions = async ({
@@ -39,22 +56,22 @@ const autoTranslateKathaAndQuestions = async ({
       const transTitle = await translateText(title, lang.code);
       const transContent = await translateText(content, lang.code);
 
-      const transQuestions = await Promise.all(
-        questions.map(async (q) => {
-          const qText = await translateText(q.question, lang.code);
-          const opts = await Promise.all(
-            q.options.map((opt) => translateText(opt, lang.code)),
-          );
-          const exp = q.explanation
-            ? await translateText(q.explanation, lang.code)
-            : "";
-          return {
-            question: qText,
-            options: opts,
-            explanation: exp,
-          };
-        }),
-      );
+      const transQuestions = [];
+      for (const q of questions) {
+        const qText = await translateText(q.question, lang.code);
+        const opts = [];
+        for (const opt of q.options) {
+          opts.push(await translateText(opt, lang.code));
+        }
+        const exp = q.explanation
+          ? await translateText(q.explanation, lang.code)
+          : "";
+        transQuestions.push({
+          question: qText,
+          options: opts,
+          explanation: exp,
+        });
+      }
 
       translations[lang.code] = {
         title: transTitle,
@@ -63,7 +80,6 @@ const autoTranslateKathaAndQuestions = async ({
       };
     } catch (langErr) {
       console.error(`Skipping translation for ${lang.name}:`, langErr.message);
-      translations[lang.code] = translations.hi;
     }
   }
 

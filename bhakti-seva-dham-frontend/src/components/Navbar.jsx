@@ -41,7 +41,10 @@ export default function Navbar() {
         {/* Logo & Brand */}
         <Link to="/" className="site-brand" onClick={closeMenu}>
           <div className="site-brand-icon">
-            <span aria-hidden="true">ॐ</span>
+            <img
+              src="/images/radhaRaman.png"
+              alt="Radha Krishna Bhaktimarg"
+            />
           </div>
           <div className="site-brand-text">
             <strong>राधाकृष्ण भक्तिमार्ग</strong>
