@@ -5,11 +5,33 @@ const { protect, adminOnly } = require("../middleware/authMiddleware");
 
 // Helper to extract clean YouTube ID
 const extractYouTubeId = (url) => {
-  if (!url) return null;
-  const match = url.match(
-    /(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))([\w-]{11})/,
-  );
-  return match ? match[1] : null;
+  if (!url || typeof url !== "string") return null;
+
+  try {
+    const parsedUrl = new URL(url.trim());
+    const hostname = parsedUrl.hostname.toLowerCase().replace(/^www\./, "");
+
+    if (hostname === "youtu.be") {
+      return parsedUrl.pathname.slice(1).match(/^[\w-]{11}$/)?.[0] || null;
+    }
+
+    if (hostname !== "youtube.com" && hostname !== "m.youtube.com") {
+      return null;
+    }
+
+    const pathParts = parsedUrl.pathname.split("/").filter(Boolean);
+    const pathId =
+      pathParts[0] === "embed" ||
+      pathParts[0] === "v" ||
+      pathParts[0] === "live" ||
+      pathParts[0] === "shorts"
+        ? pathParts[1]
+        : parsedUrl.searchParams.get("v");
+
+    return pathId?.match(/^[\w-]{11}$/)?.[0] || null;
+  } catch {
+    return null;
+  }
 };
 
 // @route   GET /api/bhajans
