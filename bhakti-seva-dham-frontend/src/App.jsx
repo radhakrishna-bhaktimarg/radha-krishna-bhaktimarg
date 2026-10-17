@@ -76,7 +76,24 @@ function Footer() {
         </nav>
 
         <small className="block text-[#A8929A] text-[11px] pt-2 border-t border-white/10 w-full max-w-xs mx-auto">
-          © 2026 Radha Krishna Bhaktimarg. Designed BY @Ki.ran_.ig
+          © 2026 Radha Krishna Bhaktimarg. Designed BY{" "}
+          <a
+            href="https://www.instagram.com/akshay_aute_001/"
+            target="_blank"
+            rel="noreferrer"
+            className="hover:text-white transition"
+          >
+            akshay_aute_001
+          </a>{" "}
+          &amp;{" "}
+          <a
+            href="https://www.instagram.com/ki.ran_.ig/"
+            target="_blank"
+            rel="noreferrer"
+            className="hover:text-white transition"
+          >
+            @Ki.ran_.ig
+          </a>
         </small>
       </div>
     </footer>
