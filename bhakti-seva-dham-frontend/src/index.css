@@ -1,6 +1,12 @@
 @import "tailwindcss";
 
 /* Base styles & layout defaults */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
 html {
   scroll-behavior: smooth;
 }
@@ -12,6 +18,10 @@ body {
   color: #38232c;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
   overflow-x: hidden;
+}
+
+#root {
+  width: 100%;
 }
 
 .app-shell {

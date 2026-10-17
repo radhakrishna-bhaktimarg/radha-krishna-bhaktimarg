@@ -6,6 +6,7 @@
   position: sticky;
   top: 0;
   left: 0;
+  box-sizing: border-box;
   width: 100%;
   z-index: 9999;
   background-color: #fffdf9 !important;
@@ -14,6 +15,7 @@
 }
 
 .site-navbar-container {
+  box-sizing: border-box;
   display: flex;
   align-items: center;
   justify-content: space-between;
