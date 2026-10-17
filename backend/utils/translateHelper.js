@@ -1,31 +1,63 @@
 const { translate } = require("@vitalets/google-translate-api");
 
-const sleep = (milliseconds) =>
-  new Promise((resolve) => setTimeout(resolve, milliseconds));
+const splitForMyMemory = (text, maxLength = 450) => {
+  const chunks = [];
+  let remaining = text.trim();
+
+  while (remaining.length > maxLength) {
+    const splitAt = remaining.lastIndexOf(" ", maxLength);
+    const boundary = splitAt > 0 ? splitAt : maxLength;
+    chunks.push(remaining.slice(0, boundary));
+    remaining = remaining.slice(boundary).trim();
+  }
+
+  if (remaining) chunks.push(remaining);
+  return chunks;
+};
+
+const translateWithMyMemory = async (text, targetLang) => {
+  const chunks = splitForMyMemory(text);
+  const translatedChunks = await Promise.all(
+    chunks.map(async (chunk) => {
+      const url = new URL("https://api.mymemory.translated.net/get");
+      url.searchParams.set("q", chunk);
+      url.searchParams.set("langpair", `hi|${targetLang}`);
+
+      const response = await fetch(url);
+      if (!response.ok) {
+        throw new Error(`MyMemory responded with HTTP ${response.status}`);
+      }
+
+      const data = await response.json();
+      const translatedText = data?.responseData?.translatedText?.trim();
+      if (!translatedText) {
+        throw new Error("MyMemory returned an empty response");
+      }
+      return translatedText;
+    }),
+  );
+
+  return translatedChunks.join(" ");
+};
 
 const translateText = async (text, targetLang) => {
   if (!text || !text.trim()) return "";
 
-  let lastError;
-  for (let attempt = 1; attempt <= 3; attempt += 1) {
+  try {
+    return await translateWithMyMemory(text, targetLang);
+  } catch (myMemoryError) {
     try {
       const res = await translate(text, { to: targetLang });
       if (res.text && res.text.trim()) {
         return res.text;
       }
-      lastError = new Error("Translation provider returned an empty response");
-    } catch (err) {
-      lastError = err;
-    }
-
-    if (attempt < 3) {
-      await sleep(attempt * 500);
+      throw new Error("Google Translate returned an empty response");
+    } catch (googleError) {
+      throw new Error(
+        `Translation failed for ${targetLang}: ${myMemoryError.message}; fallback: ${googleError.message}`,
+      );
     }
   }
-
-  throw new Error(
-    `Translation failed for ${targetLang}: ${lastError?.message || "empty response"}`,
-  );
 };
 
 const autoTranslateKathaAndQuestions = async ({
@@ -56,22 +88,21 @@ const autoTranslateKathaAndQuestions = async ({
       const transTitle = await translateText(title, lang.code);
       const transContent = await translateText(content, lang.code);
 
-      const transQuestions = [];
-      for (const q of questions) {
-        const qText = await translateText(q.question, lang.code);
-        const opts = [];
-        for (const opt of q.options) {
-          opts.push(await translateText(opt, lang.code));
-        }
-        const exp = q.explanation
-          ? await translateText(q.explanation, lang.code)
-          : "";
-        transQuestions.push({
-          question: qText,
-          options: opts,
-          explanation: exp,
-        });
-      }
+      const transQuestions = await Promise.all(
+        questions.map(async (q) => {
+          const [qText, opts, exp] = await Promise.all([
+            translateText(q.question, lang.code),
+            Promise.all(q.options.map((opt) => translateText(opt, lang.code))),
+            q.explanation ? translateText(q.explanation, lang.code) : "",
+          ]);
+
+          return {
+            question: qText,
+            options: opts,
+            explanation: exp,
+          };
+        }),
+      );
 
       translations[lang.code] = {
         title: transTitle,

@@ -5,6 +5,8 @@ const Devotee = require("../models/Devotee");
 const { protect, adminOnly } = require("../middleware/authMiddleware");
 const { autoTranslateKathaAndQuestions } = require("../utils/translateHelper");
 
+const translationJobs = new Map();
+
 const getTodayDateString = () => {
   const now = new Date();
   const year = now.getFullYear();
@@ -88,9 +90,16 @@ router.get("/today-katha", protect, async (req, res) => {
     );
 
     if (missingTranslations) {
-      const generatedLanguages = await autoTranslateKathaAndQuestions({
-        ...sourceContent,
-      });
+      const translationKey = katha._id.toString();
+      let translationJob = translationJobs.get(translationKey);
+      if (!translationJob) {
+        translationJob = autoTranslateKathaAndQuestions({
+          ...sourceContent,
+        }).finally(() => translationJobs.delete(translationKey));
+        translationJobs.set(translationKey, translationJob);
+      }
+
+      const generatedLanguages = await translationJob;
 
       katha = await Katha.findByIdAndUpdate(
         katha._id,
