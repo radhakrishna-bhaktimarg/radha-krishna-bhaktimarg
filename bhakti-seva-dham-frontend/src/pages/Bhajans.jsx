@@ -20,6 +20,7 @@ import { API_BASE_URL } from "../api/api";
 import "./Bhajans.css";
 
 const CATEGORIES = ["All", "Bhajan", "Mantra", "Namavali", "Aarti", "Kirtan"];
+const PAGE_SIZE = 10;
 
 export default function Bhajans() {
   const { devotee } = useAuth();
@@ -31,6 +32,8 @@ export default function Bhajans() {
 
   const [bhajans, setBhajans] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(false);
   const [activeCategory, setActiveCategory] = useState("All");
 
   const [modalVideo, setModalVideo] = useState(null);
@@ -43,25 +46,37 @@ export default function Bhajans() {
     }
   }, [devotee]);
 
-  const fetchBhajans = async (category = "All") => {
+  const fetchBhajans = async (
+    category = "All",
+    { append = false, offset = 0 } = {},
+  ) => {
     try {
-      setLoading(true);
+      if (append) {
+        setLoadingMore(true);
+      } else {
+        setLoading(true);
+      }
       const url =
         category === "All"
-          ? `${API_BASE_URL}/bhajans`
-          : `${API_BASE_URL}/bhajans?category=${encodeURIComponent(category)}`;
+          ? `${API_BASE_URL}/bhajans?limit=${PAGE_SIZE}&offset=${offset}`
+          : `${API_BASE_URL}/bhajans?category=${encodeURIComponent(category)}&limit=${PAGE_SIZE}&offset=${offset}`;
 
       const res = await fetch(url);
       const data = await res.json();
       if (data.success && Array.isArray(data.bhajans)) {
-        setBhajans(data.bhajans);
+        setBhajans((previous) =>
+          append ? [...previous, ...data.bhajans] : data.bhajans,
+        );
+        setHasMore(Boolean(data.hasMore));
       } else {
-        setBhajans([]);
+        if (!append) setBhajans([]);
+        setHasMore(false);
       }
     } catch (err) {
       console.error("Failed to load bhajans:", err);
-      setBhajans([]);
+      if (!append) setBhajans([]);
     } finally {
+      setLoadingMore(false);
       setLoading(false);
     }
   };
@@ -69,6 +84,13 @@ export default function Bhajans() {
   useEffect(() => {
     fetchBhajans(activeCategory);
   }, [activeCategory]);
+
+  const handleLoadMore = () => {
+    fetchBhajans(activeCategory, {
+      append: true,
+      offset: bhajans.length,
+    });
+  };
 
   const toggleBgAudio = (item, e) => {
     if (e) e.stopPropagation();
@@ -214,6 +236,20 @@ export default function Bhajans() {
                 </article>
               );
             })}
+          </div>
+        )}
+
+        {!loading && bhajans.length > 0 && hasMore && (
+          <div style={{ display: "flex", justifyContent: "center", marginTop: "28px" }}>
+            <button
+              type="button"
+              className="category-tab-btn active"
+              onClick={handleLoadMore}
+              disabled={loadingMore}
+              style={{ minWidth: "150px" }}
+            >
+              {loadingMore ? "Loading..." : "Load More"}
+            </button>
           </div>
         )}
 

@@ -40,11 +40,34 @@ router.get("/", async (req, res) => {
   try {
     const category = req.query.category;
     const query = category && category !== "All" ? { category } : {};
-    const bhajans = await Bhajan.find(query).sort({ createdAt: -1 }).lean();
+    const requestedLimit = Number.parseInt(req.query.limit, 10);
+    const requestedOffset = Number.parseInt(req.query.offset, 10);
+    const limit = Math.min(
+      Number.isFinite(requestedLimit) && requestedLimit > 0
+        ? requestedLimit
+        : 10,
+      500,
+    );
+    const offset =
+      Number.isFinite(requestedOffset) && requestedOffset >= 0
+        ? requestedOffset
+        : 0;
+    const [bhajans, total] = await Promise.all([
+      Bhajan.find(query)
+        .sort({ createdAt: -1 })
+        .skip(offset)
+        .limit(limit)
+        .lean(),
+      Bhajan.countDocuments(query),
+    ]);
 
     res.json({
       success: true,
       bhajans,
+      total,
+      offset,
+      limit,
+      hasMore: offset + bhajans.length < total,
     });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });

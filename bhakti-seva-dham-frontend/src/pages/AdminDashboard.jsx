@@ -81,7 +81,7 @@ export default function AdminDashboard() {
 
   const fetchBhajans = async () => {
     try {
-      const res = await fetch(`${API_BASE_URL}/bhajans`);
+      const res = await fetch(`${API_BASE_URL}/bhajans?limit=500`);
       const data = await res.json();
       if (data.success) {
         setBhajans(data.bhajans || []);
@@ -269,10 +269,10 @@ export default function AdminDashboard() {
     e.preventDefault();
     setBhajanMsg({ type: "", text: "" });
 
-    if (bhajans.length >= 10) {
+    if (bhajans.length >= 500) {
       setBhajanMsg({
         type: "error",
-        text: "Adhiktam 10 videos ki seema poori ho chuki hai. Pehle ek delete karein.",
+        text: "Adhiktam 500 videos ki seema poori ho chuki hai. Pehle ek delete karein.",
       });
       return;
     }
@@ -366,7 +366,7 @@ export default function AdminDashboard() {
               onClick={() => setActiveTab("bhajans")}
             >
               <Video size={15} />
-              <span>Bhajans &amp; Mantras ({bhajans.length}/10)</span>
+              <span>Bhajans &amp; Mantras ({bhajans.length}/500)</span>
             </button>
             <button
               type="button"
@@ -576,9 +576,9 @@ export default function AdminDashboard() {
           <div className="admin-bhajan-section">
             <div className="admin-form-card">
               <div className="section-title-strip">
-                <h2>Add YouTube Video (Max 10 Allowed)</h2>
+                <h2>Add YouTube Video (Max 500 Allowed)</h2>
                 <span className="info-chip">
-                  Current Videos: {bhajans.length} / 10
+                  Current Videos: {bhajans.length} / 500
                 </span>
               </div>
 
@@ -638,7 +638,7 @@ export default function AdminDashboard() {
                 >
                   <button
                     type="submit"
-                    disabled={bhajanSubmitting || bhajans.length >= 10}
+                    disabled={bhajanSubmitting || bhajans.length >= 500}
                     className="admin-submit-btn"
                   >
                     <Plus size={18} />
@@ -654,7 +654,7 @@ export default function AdminDashboard() {
 
             {/* List of Active Videos */}
             <div className="admin-bhajan-list-card">
-              <h3>Active Video Gallery ({bhajans.length}/10)</h3>
+              <h3>Active Video Gallery ({bhajans.length}/500)</h3>
               {bhajans.length === 0 ? (
                 <p
                   style={{
