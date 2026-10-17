@@ -35,8 +35,8 @@ function NotFound() {
 
 function Footer() {
   return (
-    <footer className="w-full bg-[#4A0E17] text-[#FFF8ED] py-10 px-4 border-t border-[#D4AF37]/30">
-      <div className="max-w-4xl mx-auto flex flex-col items-center justify-center text-center space-y-4">
+    <footer className="box-border w-full overflow-hidden bg-[#4A0E17] text-[#FFF8ED] py-10 px-4 border-t border-[#D4AF37]/30">
+      <div className="w-full max-w-4xl mx-auto flex flex-col items-center justify-center text-center space-y-4">
         <div className="flex items-center justify-center gap-2.5">
           <span className="w-9 h-9 rounded-full bg-[#FF8C00] flex items-center justify-center text-white font-bold text-base shadow-sm">
             ॐ
@@ -75,7 +75,7 @@ function Footer() {
           </Link>
         </nav>
 
-        <small className="block whitespace-nowrap text-[#A8929A] text-[11px] pt-2 border-t border-white/10 w-full mx-auto">
+        <small className="block w-full max-w-full whitespace-normal break-words text-[#A8929A] text-[11px] pt-2 border-t border-white/10 mx-auto leading-relaxed">
           © 2026 Radha Krishna Bhaktimarg. Designed BY{" "}
           <a
             href="https://www.instagram.com/akshay_aute_001/"
