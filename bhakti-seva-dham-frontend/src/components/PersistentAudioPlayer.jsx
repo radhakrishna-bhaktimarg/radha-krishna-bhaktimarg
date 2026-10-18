@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   Headphones,
   Pause,
@@ -18,6 +18,7 @@ export default function PersistentAudioPlayer() {
     playlist,
     playbackMode,
     isPlaying,
+    setPlaying,
     play,
     pause,
     setPlaybackMode,
@@ -26,6 +27,85 @@ export default function PersistentAudioPlayer() {
     stop,
   } = useAudioPlayer();
   const [resumeKey, setResumeKey] = useState(0);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
+  const playerRef = useRef(null);
+  const playerHostRef = useRef(null);
+  const isPlayingRef = useRef(isPlaying);
+
+  useEffect(() => {
+    isPlayingRef.current = isPlaying;
+  }, [isPlaying]);
+
+  useEffect(() => {
+    if (!currentItem) return undefined;
+
+    let interval;
+    let cancelled = false;
+    const loadPlayerApi = () =>
+      new Promise((resolve) => {
+        if (window.YT?.Player) {
+          resolve(window.YT);
+          return;
+        }
+        const previousReady = window.onYouTubeIframeAPIReady;
+        window.onYouTubeIframeAPIReady = () => {
+          previousReady?.();
+          resolve(window.YT);
+        };
+        if (!document.querySelector('script[src*="youtube.com/iframe_api"]')) {
+          const script = document.createElement("script");
+          script.src = "https://www.youtube.com/iframe_api";
+          document.body.appendChild(script);
+        }
+      });
+
+    loadPlayerApi().then((YT) => {
+      if (cancelled || !playerHostRef.current) return;
+      playerRef.current = new YT.Player(playerHostRef.current, {
+        videoId: currentItem.youtubeId,
+        playerVars: {
+          autoplay: isPlayingRef.current ? 1 : 0,
+          controls: 0,
+          loop: playbackMode === "loop-one" ? 1 : 0,
+          playlist: playbackMode === "loop-one" ? currentItem.youtubeId : "",
+          origin: window.location.origin,
+        },
+        events: {
+          onReady: (event) => {
+            setDuration(event.target.getDuration() || 0);
+            if (isPlayingRef.current) event.target.playVideo();
+          },
+          onStateChange: (event) => {
+            if (event.data === YT.PlayerState.PLAYING) setPlaying(true);
+            if (event.data === YT.PlayerState.PAUSED) setPlaying(false);
+          },
+        },
+      });
+      interval = window.setInterval(() => {
+        const player = playerRef.current;
+        if (player?.getCurrentTime && player?.getDuration) {
+          setCurrentTime(player.getCurrentTime() || 0);
+          setDuration(player.getDuration() || 0);
+        }
+      }, 500);
+    });
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+      playerRef.current?.destroy?.();
+      playerRef.current = null;
+      setCurrentTime(0);
+      setDuration(0);
+    };
+  }, [currentItem, playbackMode, resumeKey, setPlaying]);
+
+  useEffect(() => {
+    if (!playerRef.current) return;
+    if (isPlaying) playerRef.current.playVideo?.();
+    else playerRef.current.pauseVideo?.();
+  }, [isPlaying]);
 
   useEffect(() => {
     if (!currentItem || !("mediaSession" in navigator)) return undefined;
@@ -86,11 +166,18 @@ export default function PersistentAudioPlayer() {
 
   if (!currentItem) return null;
 
-  const getAudioEmbedUrl = () => {
-    const base = `https://www.youtube.com/embed/${currentItem.youtubeId}?autoplay=1&rel=0`;
-    return playbackMode === "loop-one"
-      ? `${base}&loop=1&playlist=${currentItem.youtubeId}`
-      : base;
+  const formatTime = (seconds) => {
+    const minutes = Math.floor(seconds / 60);
+    const remainingSeconds = Math.floor(seconds % 60)
+      .toString()
+      .padStart(2, "0");
+    return `${minutes}:${remainingSeconds}`;
+  };
+
+  const seekTo = (event) => {
+    const nextTime = Number(event.target.value);
+    setCurrentTime(nextTime);
+    playerRef.current?.seekTo?.(nextTime, true);
   };
 
   return (
@@ -103,6 +190,22 @@ export default function PersistentAudioPlayer() {
         />
         <Headphones size={15} color="#5c141d" />
         <span className="mini-audio-title">{currentItem.title}</span>
+      </div>
+
+      <div className="mini-audio-progress">
+        <input
+          type="range"
+          min="0"
+          max={duration || 0}
+          step="1"
+          value={Math.min(currentTime, duration || 0)}
+          onChange={seekTo}
+          aria-label="Song progress"
+          disabled={!duration}
+        />
+        <span>
+          {formatTime(currentTime)} / {formatTime(duration)}
+        </span>
       </div>
 
       <div className="mini-audio-right">
@@ -164,21 +267,11 @@ export default function PersistentAudioPlayer() {
         </button>
       </div>
 
-      {isPlaying && (
-        <iframe
-          key={`${currentItem.youtubeId}-${playbackMode}-${isPlaying}-${resumeKey}`}
-          src={getAudioEmbedUrl()}
-          title="Background Audio"
-          allow="autoplay"
-          style={{
-            position: "absolute",
-            width: "1px",
-            height: "1px",
-            opacity: 0,
-            pointerEvents: "none",
-          }}
-        />
-      )}
+      <div
+        ref={playerHostRef}
+        className="youtube-audio-host"
+        aria-hidden="true"
+      />
     </aside>
   );
 }

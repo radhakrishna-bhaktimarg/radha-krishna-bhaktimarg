@@ -34,6 +34,7 @@ export function AudioPlayerProvider({ children }) {
       playlist,
       playbackMode,
       isPlaying,
+      setPlaying: setIsPlaying,
       playItem: (item, items = playlist) => {
         setPlaylist(items);
         setCurrentItem(item);
