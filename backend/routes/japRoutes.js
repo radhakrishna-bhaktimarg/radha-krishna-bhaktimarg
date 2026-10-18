@@ -1,6 +1,9 @@
 const express = require("express");
 const router = express.Router();
 const authMiddleware = require("../middleware/authMiddleware");
+const {
+  recordDailyLeaderboardEntry,
+} = require("../utils/dailyLeaderboardHelper");
 
 const protect = authMiddleware.protect || authMiddleware;
 
@@ -46,6 +49,14 @@ router.post("/sync", protect, async (req, res) => {
     devotee.totalScore = (devotee.dailyQuizScore || 0) + devotee.japScore;
 
     await devotee.save();
+    if (malasToAdd > 0) {
+      await recordDailyLeaderboardEntry({
+        devoteeId: devotee._id,
+        name: devotee.name,
+        date: today,
+        completedMalas: devotee.dailyCompletedMalas,
+      });
+    }
 
     res.status(200).json({
       success: true,

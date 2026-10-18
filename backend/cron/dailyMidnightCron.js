@@ -1,6 +1,7 @@
 const cron = require("node-cron");
 const Devotee = require("../models/Devotee");
 const DailyLeaderboard = require("../models/DailyLeaderboard");
+const { getAppDateString } = require("../utils/dailyLeaderboardHelper");
 
 const APP_TIME_ZONE = process.env.APP_TIME_ZONE || "Asia/Kolkata";
 
@@ -8,18 +9,7 @@ const APP_TIME_ZONE = process.env.APP_TIME_ZONE || "Asia/Kolkata";
 const getDateString = (daysOffset = 0) => {
   const date = new Date();
   date.setDate(date.getDate() + daysOffset);
-  const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone: APP_TIME_ZONE,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).formatToParts(date);
-  const values = Object.fromEntries(
-    parts
-      .filter(({ type }) => type !== "literal")
-      .map(({ type, value }) => [type, value]),
-  );
-  return `${values.year}-${values.month}-${values.day}`;
+  return getAppDateString(date);
 };
 
 // Snapshot generator & day reset logic
@@ -32,14 +22,26 @@ const executeDailyMidnightRollover = async () => {
       `⏰ [CRON] Starting Daily Midnight Leaderboard Rollover for ${yesterday}...`,
     );
 
-    // 1. Gather all devotees and compute their final scores for yesterday
+    // 1. Finalize activity already recorded during the day.
+    const existingSnapshot = await DailyLeaderboard.findOne({
+      date: yesterday,
+    }).lean();
+
+    if (existingSnapshot) {
+      await DailyLeaderboard.updateOne(
+        { date: yesterday },
+        { $set: { isFinalized: true } },
+      );
+    }
+
+    // Legacy fallback for activity recorded before daily snapshots were added.
     const devotees = await Devotee.find({ role: "devotee" })
       .select(
         "name lastQuizDate dailyQuizAttempts dailyQuizScore dailyQuizTimeTaken lastJapDate dailyCompletedMalas",
       )
       .lean();
 
-    const formattedRankings = devotees
+    const legacyRankings = devotees
       .map((d) => {
         const quizScore =
           d.lastQuizDate === yesterday ? d.dailyQuizScore || 0 : 0;
@@ -76,15 +78,16 @@ const executeDailyMidnightRollover = async () => {
       })
       .map((item, idx) => ({ ...item, rank: idx + 1 }));
 
-    // 2. Archive snapshot into DailyLeaderboard
-    await DailyLeaderboard.findOneAndUpdate(
-      { date: yesterday },
-      { date: yesterday, rankings: formattedRankings, isFinalized: true },
-      { upsert: true, new: true, setDefaultsOnInsert: true },
-    );
+    if (!existingSnapshot) {
+      await DailyLeaderboard.findOneAndUpdate(
+        { date: yesterday },
+        { date: yesterday, rankings: legacyRankings, isFinalized: true },
+        { upsert: true, new: true, setDefaultsOnInsert: true },
+      );
+    }
 
     console.log(
-      `✅ [CRON] DailyLeaderboard snapshot archived for ${yesterday} (${formattedRankings.length} devotees).`,
+      `✅ [CRON] DailyLeaderboard snapshot archived for ${yesterday} (${existingSnapshot?.rankings?.length || legacyRankings.length} devotees).`,
     );
 
     // 3. Reset daily metrics on all devotees for the new day
@@ -109,7 +112,7 @@ const executeDailyMidnightRollover = async () => {
     return {
       success: true,
       yesterday,
-      archivedDevotees: formattedRankings.length,
+      archivedDevotees: existingSnapshot?.rankings?.length || legacyRankings.length,
     };
   } catch (error) {
     console.error("❌ [CRON] Midnight Rollover Error:", error);

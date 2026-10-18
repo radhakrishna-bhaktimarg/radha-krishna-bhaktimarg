@@ -4,6 +4,9 @@ const Katha = require("../models/Katha");
 const Devotee = require("../models/Devotee");
 const { protect, adminOnly } = require("../middleware/authMiddleware");
 const { autoTranslateKathaAndQuestions } = require("../utils/translateHelper");
+const {
+  recordDailyLeaderboardEntry,
+} = require("../utils/dailyLeaderboardHelper");
 
 const translationJobs = new Map();
 
@@ -250,6 +253,13 @@ router.post("/submit-daily", protect, async (req, res) => {
     devotee.totalScore = earnedScore + currentJapPts;
 
     await devotee.save();
+    await recordDailyLeaderboardEntry({
+      devoteeId: devotee._id,
+      name: devotee.name,
+      date: today,
+      quizScore: devotee.dailyQuizScore,
+      quizTimeTaken: devotee.dailyQuizTimeTaken,
+    });
 
     res.json({
       success: true,

@@ -3,29 +3,29 @@ const router = express.Router();
 const Devotee = require("../models/Devotee");
 const DailyLeaderboard = require("../models/DailyLeaderboard");
 const { protect, adminOnly } = require("../middleware/authMiddleware");
+const {
+  getAppDateString,
+} = require("../utils/dailyLeaderboardHelper");
 const { executeDailyMidnightRollover } = require("../cron/dailyMidnightCron");
-
-const APP_TIME_ZONE = process.env.APP_TIME_ZONE || "Asia/Kolkata";
 
 // Helper: App-local date formatter YYYY-MM-DD
 const getDateString = (daysOffset = 0) => {
   const date = new Date();
   date.setDate(date.getDate() + daysOffset);
-  const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone: APP_TIME_ZONE,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).formatToParts(date);
-  const values = Object.fromEntries(
-    parts
-      .filter(({ type }) => type !== "literal")
-      .map(({ type, value }) => [type, value]),
-  );
-  return `${values.year}-${values.month}-${values.day}`;
+  return getAppDateString(date);
 };
 
-// Snapshot generator for historical dates if not already archived
+const finalizeSnapshot = async (date) => {
+  await DailyLeaderboard.updateOne(
+    { date, isFinalized: false },
+    { $set: { isFinalized: true } },
+  );
+};
+
+/*
+ * Kept for historical snapshots created before activity was recorded directly.
+ * New entries are written by the quiz and jap routes as they happen.
+ */
 const generateAndSaveSnapshot = async (targetDate, isFinalized = false) => {
   const devotees = await Devotee.find({ role: "devotee" })
     .select(
@@ -180,11 +180,11 @@ router.get("/", async (req, res) => {
       requestedDate === getDateString(-1) &&
       (!snapshot || !snapshot.isFinalized)
     ) {
-      await executeDailyMidnightRollover();
+      await finalizeSnapshot(requestedDate);
       snapshot = await DailyLeaderboard.findOne({
         date: requestedDate,
       }).lean();
-    } else if (!snapshot || !snapshot.isFinalized) {
+    } else if (!snapshot) {
       snapshot = await generateAndSaveSnapshot(
         requestedDate,
         true,
