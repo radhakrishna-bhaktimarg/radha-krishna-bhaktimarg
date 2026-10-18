@@ -34,6 +34,8 @@ const getTodayDateString = () => {
 };
 const getQuizCacheKey = (devotee) =>
   `daily_quiz_katha_${devotee?._id || devotee?.email || "user"}_${getTodayDateString()}`;
+const getActiveQuizKey = (devotee) =>
+  `daily_quiz_active_${devotee?._id || devotee?.email || "user"}_${getTodayDateString()}`;
 
 export default function Quiz() {
   const { devotee } = useAuth();
@@ -182,6 +184,57 @@ export default function Quiz() {
     fetchTodayKathaQuiz();
   }, [devotee]);
 
+  useEffect(() => {
+    if (loading || !hasKatha || alreadyAttempted || flowState !== "quiz") {
+      return;
+    }
+
+    sessionStorage.setItem(
+      getActiveQuizKey(devotee),
+      JSON.stringify({
+        currentLang,
+        currentStep,
+        quizStartTime,
+        userAnswers,
+      }),
+    );
+  }, [
+    alreadyAttempted,
+    currentLang,
+    currentStep,
+    devotee,
+    flowState,
+    hasKatha,
+    loading,
+    quizStartTime,
+    userAnswers,
+  ]);
+
+  useEffect(() => {
+    if (loading || !hasKatha || alreadyAttempted) return;
+
+    const activeQuiz = sessionStorage.getItem(getActiveQuizKey(devotee));
+    if (!activeQuiz) return;
+
+    try {
+      const parsed = JSON.parse(activeQuiz);
+      setCurrentLang(parsed.currentLang || "hi");
+      setCurrentStep(
+        Number.isInteger(parsed.currentStep) ? parsed.currentStep : 0,
+      );
+      setQuizStartTime(parsed.quizStartTime || Date.now());
+      setUserAnswers(
+        parsed.userAnswers && typeof parsed.userAnswers === "object"
+          ? parsed.userAnswers
+          : {},
+      );
+      setFlowState("quiz");
+      setPendingLeave("__reload__");
+    } catch {
+      sessionStorage.removeItem(getActiveQuizKey(devotee));
+    }
+  }, [alreadyAttempted, devotee, hasKatha, loading]);
+
   // Derive active content and questions based on language selection
   const activeContent =
     languagesData?.[currentLang] || languagesData?.hi || rawKatha;
@@ -256,6 +309,7 @@ export default function Quiz() {
 
       if (data.success) {
         sessionStorage.removeItem(getQuizCacheKey(devotee));
+        sessionStorage.removeItem(getActiveQuizKey(devotee));
         setEarnedScore(data.earnedScore);
         setCorrectCount(
           data.correctCount !== undefined ? data.correctCount : null,
@@ -378,8 +432,46 @@ export default function Quiz() {
     const destination = pendingLeave;
     setPendingLeave(null);
     const submitted = await submitAttemptRef.current?.();
-    if (submitted) navigate(destination);
+    if (submitted && destination !== "__reload__") navigate(destination);
   };
+
+  const renderLeaveModal = () =>
+    pendingLeave && (
+      <div className="quiz-leave-modal-backdrop" role="presentation">
+        <div
+          className="quiz-leave-modal"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="quiz-leave-title"
+        >
+          <div className="quiz-leave-icon">
+            <Clock size={24} />
+          </div>
+          <h2 id="quiz-leave-title">Quiz chhodna hai?</h2>
+          <p>
+            Aapka quiz abhi chal raha hai. Leave karne par aapke current
+            answers automatically submit ho jayenge.
+          </p>
+          <div className="quiz-leave-actions">
+            <button
+              type="button"
+              className="quiz-leave-stay-btn"
+              onClick={() => setPendingLeave(null)}
+            >
+              Quiz par wapas jayein
+            </button>
+            <button
+              type="button"
+              className="quiz-leave-confirm-btn"
+              onClick={confirmLeaveQuiz}
+              disabled={submitting}
+            >
+              {submitting ? "Submit ho raha hai..." : "Submit & Leave"}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
 
   if (loading) {
     return (
@@ -405,41 +497,6 @@ export default function Quiz() {
   if (!hasKatha) {
     return (
       <div className="quiz-page">
-        {pendingLeave && (
-          <div className="quiz-leave-modal-backdrop" role="presentation">
-            <div
-              className="quiz-leave-modal"
-              role="dialog"
-              aria-modal="true"
-              aria-labelledby="quiz-leave-title"
-            >
-              <div className="quiz-leave-icon">
-                <Clock size={24} />
-              </div>
-              <h2 id="quiz-leave-title">Quiz chhodna hai?</h2>
-              <p>
-                Aapka quiz abhi chal raha hai. Leave karne par aapke current
-                answers automatically submit ho jayenge.
-              </p>
-              <div className="quiz-leave-actions">
-                <button
-                  type="button"
-                  className="quiz-leave-stay-btn"
-                  onClick={() => setPendingLeave(null)}
-                >
-                  Quiz par wapas jayein
-                </button>
-                <button
-                  type="button"
-                  className="quiz-leave-confirm-btn"
-                  onClick={confirmLeaveQuiz}
-                >
-                  Submit &amp; Leave
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
         <div className="quiz-container">
           <div className="quiz-blank-card">
             <Clock size={46} color="#b85b00" style={{ margin: "0 auto" }} />
@@ -626,6 +683,7 @@ export default function Quiz() {
   // 4. QUIZ PHASE
   return (
     <div className="quiz-page">
+      {renderLeaveModal()}
       <div className="quiz-container">
         <header className="quiz-header">
           <span className="quiz-badge">
