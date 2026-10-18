@@ -13,6 +13,8 @@ import ProtectedRoute from "./components/ProtectedRoute";
 import Profile from "./pages/Profile";
 import AdminDashboard from "./pages/AdminDashboard";
 import Bhajans from "./pages/Bhajans";
+import { AudioPlayerProvider } from "./context/AudioPlayerContext";
+import PersistentAudioPlayer from "./components/PersistentAudioPlayer";
 
 function NotFound() {
   return (
@@ -104,9 +106,10 @@ export default function App() {
   const { isAuthModalOpen, closeAuthModal } = useAuth();
 
   return (
-    <BrowserRouter>
-      <div className="app-shell flex flex-col min-h-screen bg-spiritual-cream font-sans">
-        <Navbar />
+    <AudioPlayerProvider>
+      <BrowserRouter>
+        <div className="app-shell flex flex-col min-h-screen bg-spiritual-cream font-sans">
+          <Navbar />
 
         {/* Global Auth Modal */}
         <AuthModal isOpen={isAuthModalOpen} onClose={closeAuthModal} />
@@ -175,8 +178,10 @@ export default function App() {
           </Routes>
         </main>
 
-        <Footer />
-      </div>
-    </BrowserRouter>
+          <Footer />
+          <PersistentAudioPlayer />
+        </div>
+      </BrowserRouter>
+    </AudioPlayerProvider>
   );
 }

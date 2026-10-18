@@ -374,6 +374,26 @@
   animation: slideDockUp 0.3s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
+@media (max-width: 600px) {
+  .mini-audio-bar {
+    bottom: 12px !important;
+    width: calc(100% - 16px) !important;
+    padding: 8px 10px !important;
+    border-radius: 16px !important;
+    flex-wrap: wrap;
+  }
+
+  .mini-audio-left {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .mini-audio-right {
+    width: 100%;
+    justify-content: flex-end;
+  }
+}
+
 @keyframes slideDockUp {
   from {
     transform: translate(-50%, 40px);
@@ -449,5 +469,33 @@
 }
 
 .btn-mini-close:hover {
+  color: #991b1b;
+}
+
+.mini-audio-mode,
+.mini-audio-stop {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: 1px solid #ebd4ab;
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.mini-audio-mode {
+  background: #5c141d;
+  color: #ffffff;
+}
+
+.mini-audio-stop {
+  background: #fff;
+  color: #5c141d;
+}
+
+.mini-audio-stop:hover {
+  background: #fee2e2;
   color: #991b1b;
 }

@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from "react";
-import { Link } from "react-router-dom";
 import {
   Music,
   Play,
@@ -8,14 +7,9 @@ import {
   Sparkles,
   ExternalLink,
   Headphones,
-  Volume2,
-  SkipForward,
-  SkipBack,
-  Repeat,
-  Shuffle,
-  Maximize2,
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
+import { useAudioPlayer } from "../context/AudioPlayerContext";
 import { API_BASE_URL } from "../api/api";
 import "./Bhajans.css";
 
@@ -37,8 +31,7 @@ export default function Bhajans() {
   const [activeCategory, setActiveCategory] = useState("All");
 
   const [modalVideo, setModalVideo] = useState(null);
-  const [bgAudioItem, setBgAudioItem] = useState(null);
-  const [playbackMode, setPlaybackMode] = useState("loop-one"); // default to repeat current track
+  const { currentItem: bgAudioItem, playItem, stop } = useAudioPlayer();
 
   useEffect(() => {
     if (devotee?.name) {
@@ -95,10 +88,10 @@ export default function Bhajans() {
   const toggleBgAudio = (item, e) => {
     if (e) e.stopPropagation();
     if (bgAudioItem?._id === item._id) {
-      setBgAudioItem(null);
+      stop();
     } else {
       setModalVideo(null);
-      setBgAudioItem(item);
+      playItem(item, bhajans);
     }
   };
 
@@ -106,30 +99,8 @@ export default function Bhajans() {
     if (modalVideo) {
       const current = modalVideo;
       setModalVideo(null);
-      setBgAudioItem(current);
+      playItem(current, bhajans);
     }
-  };
-
-  const handlePlayNext = () => {
-    if (!bgAudioItem || bhajans.length === 0) return;
-    const currentIndex = bhajans.findIndex((b) => b._id === bgAudioItem._id);
-    const nextIndex = (currentIndex + 1) % bhajans.length;
-    setBgAudioItem(bhajans[nextIndex]);
-  };
-
-  const handlePlayPrev = () => {
-    if (!bgAudioItem || bhajans.length === 0) return;
-    const currentIndex = bhajans.findIndex((b) => b._id === bgAudioItem._id);
-    const prevIndex = (currentIndex - 1 + bhajans.length) % bhajans.length;
-    setBgAudioItem(bhajans[prevIndex]);
-  };
-
-  const getAudioEmbedUrl = (youtubeId) => {
-    if (!youtubeId) return "";
-    if (playbackMode === "loop-one") {
-      return `https://www.youtube.com/embed/${youtubeId}?autoplay=1&loop=1&playlist=${youtubeId}&rel=0`;
-    }
-    return `https://www.youtube.com/embed/${youtubeId}?autoplay=1&rel=0`;
   };
 
   return (
@@ -310,125 +281,6 @@ export default function Bhajans() {
           </div>
         )}
 
-        {/* Floating Background Audio Bar */}
-        {bgAudioItem && (
-          <aside className="mini-audio-bar">
-            <div className="mini-audio-left">
-              <img
-                src={bgAudioItem.thumbnailUrl}
-                alt={bgAudioItem.title}
-                className="mini-audio-thumb"
-              />
-              <span className="mini-audio-title">{bgAudioItem.title}</span>
-            </div>
-
-            <div className="mini-audio-right">
-              {/* Previous */}
-              {bhajans.length > 1 && (
-                <button
-                  type="button"
-                  className="btn-mini-control"
-                  onClick={handlePlayPrev}
-                  title="Pichhla Bhajan (Previous)"
-                >
-                  <SkipBack size={14} />
-                </button>
-              )}
-
-              {/* Next */}
-              {bhajans.length > 1 && (
-                <button
-                  type="button"
-                  className="btn-mini-control"
-                  onClick={handlePlayNext}
-                  title="Agla Bhajan (Next)"
-                >
-                  <SkipForward size={14} />
-                </button>
-              )}
-
-              {/* Loop / Cycle Toggle */}
-              <button
-                type="button"
-                onClick={() =>
-                  setPlaybackMode((prev) =>
-                    prev === "loop-one" ? "auto-next" : "loop-one",
-                  )
-                }
-                title={
-                  playbackMode === "loop-one"
-                    ? "Currently: Repeat 1 (Ek hi dhun bar-bar chalegi)"
-                    : "Currently: Cycle Mode (Agla bhajan kram-anusar chalega)"
-                }
-                style={{
-                  background:
-                    playbackMode === "loop-one" ? "#5c141d" : "#faeed1",
-                  color: playbackMode === "loop-one" ? "#ffffff" : "#8c5825",
-                  border: "1px solid #ebd4ab",
-                  borderRadius: "999px",
-                  padding: "4px 10px",
-                  fontSize: "0.72rem",
-                  fontWeight: 700,
-                  cursor: "pointer",
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: "4px",
-                }}
-              >
-                {playbackMode === "loop-one" ? (
-                  <>
-                    <Repeat size={11} />
-                    <span>Repeat 1</span>
-                  </>
-                ) : (
-                  <>
-                    <Shuffle size={11} />
-                    <span>Cycle</span>
-                  </>
-                )}
-              </button>
-
-              {/* Expand to Video */}
-              <button
-                type="button"
-                className="category-tab-btn active"
-                style={{ padding: "4px 10px", fontSize: "0.72rem" }}
-                onClick={() => {
-                  const current = bgAudioItem;
-                  setBgAudioItem(null);
-                  setModalVideo(current);
-                }}
-              >
-                Video
-              </button>
-
-              {/* Close */}
-              <button
-                type="button"
-                className="btn-mini-close"
-                onClick={() => setBgAudioItem(null)}
-                title="Audio Band Karein"
-              >
-                <X size={16} />
-              </button>
-            </div>
-
-            {/* Hidden Background Audio Stream */}
-            <iframe
-              key={`${bgAudioItem.youtubeId}-${playbackMode}`}
-              src={getAudioEmbedUrl(bgAudioItem.youtubeId)}
-              title="BG Audio"
-              style={{
-                position: "absolute",
-                width: "1px",
-                height: "1px",
-                opacity: 0,
-                pointerEvents: "none",
-              }}
-              allow="autoplay"
-            ></iframe>
-          </aside>
-        )}
       </div>
     </div>
   );
