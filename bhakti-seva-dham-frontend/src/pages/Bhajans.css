@@ -472,8 +472,7 @@
   color: #991b1b;
 }
 
-.mini-audio-mode,
-.mini-audio-stop {
+.mini-audio-mode {
   display: inline-flex;
   align-items: center;
   gap: 4px;
@@ -488,14 +487,4 @@
 .mini-audio-mode {
   background: #5c141d;
   color: #ffffff;
-}
-
-.mini-audio-stop {
-  background: #fff;
-  color: #5c141d;
-}
-
-.mini-audio-stop:hover {
-  background: #fee2e2;
-  color: #991b1b;
 }

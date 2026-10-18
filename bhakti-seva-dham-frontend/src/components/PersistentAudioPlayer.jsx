@@ -155,14 +155,6 @@ export default function PersistentAudioPlayer() {
         </button>
         <button
           type="button"
-          className="mini-audio-stop"
-          onClick={stop}
-          title="Stop audio"
-        >
-          Stop
-        </button>
-        <button
-          type="button"
           className="btn-mini-close"
           onClick={stop}
           title="Stop audio"
