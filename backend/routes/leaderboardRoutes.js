@@ -68,65 +68,6 @@ const generateAndSaveSnapshot = async (targetDate, isFinalized = false) => {
         combinedScore,
         participated,
       };
-
-      const repairSnapshotFromCurrentActivity = async (targetDate, snapshot) => {
-        const devotees = await Devotee.find({
-          role: "devotee",
-          $or: [
-            { lastQuizDate: targetDate, dailyQuizAttempts: { $gte: 1 } },
-            { lastJapDate: targetDate, dailyCompletedMalas: { $gt: 0 } },
-          ],
-        })
-          .select(
-            "name lastQuizDate dailyQuizAttempts dailyQuizScore dailyQuizTimeTaken lastJapDate dailyCompletedMalas",
-          )
-          .lean();
-
-        if (!devotees.length) return snapshot;
-
-        const rankings = [...(snapshot?.rankings || [])];
-        devotees.forEach((d) => {
-          const quizScore =
-            d.lastQuizDate === targetDate ? d.dailyQuizScore || 0 : 0;
-          const quizTimeTaken =
-            d.lastQuizDate === targetDate ? d.dailyQuizTimeTaken || 999999 : 999999;
-          const completedMalas =
-            d.lastJapDate === targetDate ? d.dailyCompletedMalas || 0 : 0;
-          const entry = {
-            devoteeId: d._id,
-            name: d.name,
-            quizScore,
-            quizTimeTaken,
-            completedMalas,
-            japPoints: completedMalas * 5,
-            combinedScore: quizScore + completedMalas * 5,
-          };
-          const index = rankings.findIndex(
-            (ranking) => ranking.devoteeId.toString() === d._id.toString(),
-          );
-          if (index >= 0) rankings[index] = { ...rankings[index], ...entry };
-          else rankings.push(entry);
-        });
-
-        rankings.sort((a, b) => {
-          if (b.combinedScore !== a.combinedScore) {
-            return b.combinedScore - a.combinedScore;
-          }
-          if (a.quizTimeTaken !== b.quizTimeTaken) {
-            return a.quizTimeTaken - b.quizTimeTaken;
-          }
-          return b.completedMalas - a.completedMalas;
-        });
-        rankings.forEach((ranking, index) => {
-          ranking.rank = index + 1;
-        });
-
-        return DailyLeaderboard.findOneAndUpdate(
-          { date: targetDate },
-          { date: targetDate, rankings, isFinalized: true },
-          { upsert: true, new: true, setDefaultsOnInsert: true },
-        );
-      };
     })
     .filter((item) => item.participated)
     .sort((a, b) => {
@@ -147,6 +88,65 @@ const generateAndSaveSnapshot = async (targetDate, isFinalized = false) => {
   );
 
   return record;
+};
+
+const repairSnapshotFromCurrentActivity = async (targetDate, snapshot) => {
+  const devotees = await Devotee.find({
+    role: "devotee",
+    $or: [
+      { lastQuizDate: targetDate, dailyQuizAttempts: { $gte: 1 } },
+      { lastJapDate: targetDate, dailyCompletedMalas: { $gt: 0 } },
+    ],
+  })
+    .select(
+      "name lastQuizDate dailyQuizAttempts dailyQuizScore dailyQuizTimeTaken lastJapDate dailyCompletedMalas",
+    )
+    .lean();
+
+  if (!devotees.length) return snapshot;
+
+  const rankings = [...(snapshot?.rankings || [])];
+  devotees.forEach((d) => {
+    const quizScore =
+      d.lastQuizDate === targetDate ? d.dailyQuizScore || 0 : 0;
+    const quizTimeTaken =
+      d.lastQuizDate === targetDate ? d.dailyQuizTimeTaken || 999999 : 999999;
+    const completedMalas =
+      d.lastJapDate === targetDate ? d.dailyCompletedMalas || 0 : 0;
+    const entry = {
+      devoteeId: d._id,
+      name: d.name,
+      quizScore,
+      quizTimeTaken,
+      completedMalas,
+      japPoints: completedMalas * 5,
+      combinedScore: quizScore + completedMalas * 5,
+    };
+    const index = rankings.findIndex(
+      (ranking) => ranking.devoteeId.toString() === d._id.toString(),
+    );
+    if (index >= 0) rankings[index] = { ...rankings[index], ...entry };
+    else rankings.push(entry);
+  });
+
+  rankings.sort((a, b) => {
+    if (b.combinedScore !== a.combinedScore) {
+      return b.combinedScore - a.combinedScore;
+    }
+    if (a.quizTimeTaken !== b.quizTimeTaken) {
+      return a.quizTimeTaken - b.quizTimeTaken;
+    }
+    return b.completedMalas - a.completedMalas;
+  });
+  rankings.forEach((ranking, index) => {
+    ranking.rank = index + 1;
+  });
+
+  return DailyLeaderboard.findOneAndUpdate(
+    { date: targetDate },
+    { date: targetDate, rankings, isFinalized: true },
+    { upsert: true, new: true, setDefaultsOnInsert: true },
+  );
 };
 
 // @route   GET /api/leaderboard?date=YYYY-MM-DD
