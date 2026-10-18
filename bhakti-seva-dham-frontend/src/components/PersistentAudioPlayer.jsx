@@ -1,6 +1,8 @@
-import React, { useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import {
   Headphones,
+  Pause,
+  Play,
   Repeat,
   Shuffle,
   SkipBack,
@@ -15,11 +17,15 @@ export default function PersistentAudioPlayer() {
     currentItem,
     playlist,
     playbackMode,
+    isPlaying,
+    play,
+    pause,
     setPlaybackMode,
     playNext,
     playPrevious,
     stop,
   } = useAudioPlayer();
+  const [resumeKey, setResumeKey] = useState(0);
 
   useEffect(() => {
     if (!currentItem || !("mediaSession" in navigator)) return undefined;
@@ -32,11 +38,16 @@ export default function PersistentAudioPlayer() {
         ? [{ src: currentItem.thumbnailUrl, sizes: "512x512" }]
         : [],
     });
-    ["nexttrack", "previoustrack", "stop"].forEach((action) => {
+    navigator.mediaSession.playbackState = isPlaying ? "playing" : "paused";
+    ["play", "pause", "nexttrack", "previoustrack", "stop"].forEach((action) => {
       try {
         navigator.mediaSession.setActionHandler(
           action,
-          action === "nexttrack"
+          action === "play"
+            ? play
+            : action === "pause"
+              ? pause
+              : action === "nexttrack"
             ? playNext
             : action === "previoustrack"
               ? playPrevious
@@ -49,7 +60,7 @@ export default function PersistentAudioPlayer() {
 
     return () => {
       navigator.mediaSession.metadata = null;
-      ["nexttrack", "previoustrack", "stop"].forEach((action) => {
+      ["play", "pause", "nexttrack", "previoustrack", "stop"].forEach((action) => {
         try {
           navigator.mediaSession.setActionHandler(action, null);
         } catch {
@@ -57,7 +68,21 @@ export default function PersistentAudioPlayer() {
         }
       });
     };
-  }, [currentItem, playNext, playPrevious, stop]);
+  }, [currentItem, isPlaying, pause, play, playNext, playPrevious, stop]);
+
+  useEffect(() => {
+    if (!currentItem) return undefined;
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible" && isPlaying) {
+        setResumeKey((key) => key + 1);
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () =>
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+  }, [currentItem, isPlaying]);
 
   if (!currentItem) return null;
 
@@ -92,6 +117,15 @@ export default function PersistentAudioPlayer() {
             <SkipBack size={14} />
           </button>
         )}
+        <button
+          type="button"
+          className="btn-mini-control"
+          onClick={isPlaying ? pause : play}
+          title={isPlaying ? "Pause audio" : "Start audio"}
+          aria-label={isPlaying ? "Pause audio" : "Start audio"}
+        >
+          {isPlaying ? <Pause size={14} /> : <Play size={14} fill="currentColor" />}
+        </button>
         {playlist.length > 1 && (
           <button
             type="button"
@@ -138,19 +172,21 @@ export default function PersistentAudioPlayer() {
         </button>
       </div>
 
-      <iframe
-        key={`${currentItem.youtubeId}-${playbackMode}`}
-        src={getAudioEmbedUrl()}
-        title="Background Audio"
-        allow="autoplay"
-        style={{
-          position: "absolute",
-          width: "1px",
-          height: "1px",
-          opacity: 0,
-          pointerEvents: "none",
-        }}
-      />
+      {isPlaying && (
+        <iframe
+          key={`${currentItem.youtubeId}-${playbackMode}-${isPlaying}-${resumeKey}`}
+          src={getAudioEmbedUrl()}
+          title="Background Audio"
+          allow="autoplay"
+          style={{
+            position: "absolute",
+            width: "1px",
+            height: "1px",
+            opacity: 0,
+            pointerEvents: "none",
+          }}
+        />
+      )}
     </aside>
   );
 }

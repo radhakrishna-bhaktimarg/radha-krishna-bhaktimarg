@@ -12,6 +12,7 @@ export function AudioPlayerProvider({ children }) {
   const [currentItem, setCurrentItem] = useState(null);
   const [playlist, setPlaylist] = useState([]);
   const [playbackMode, setPlaybackMode] = useState("loop-one");
+  const [isPlaying, setIsPlaying] = useState(false);
 
   const playNext = useCallback(() => {
     if (!currentItem || playlist.length === 0) return;
@@ -32,16 +33,23 @@ export function AudioPlayerProvider({ children }) {
       currentItem,
       playlist,
       playbackMode,
+      isPlaying,
       playItem: (item, items = playlist) => {
         setPlaylist(items);
         setCurrentItem(item);
+        setIsPlaying(true);
       },
-      stop: () => setCurrentItem(null),
+      play: () => setIsPlaying(true),
+      pause: () => setIsPlaying(false),
+      stop: () => {
+        setCurrentItem(null);
+        setIsPlaying(false);
+      },
       setPlaybackMode,
       playNext,
       playPrevious,
     }),
-    [currentItem, playbackMode, playNext, playPrevious, playlist],
+    [currentItem, isPlaying, playbackMode, playNext, playPrevious, playlist],
   );
 
   return (
