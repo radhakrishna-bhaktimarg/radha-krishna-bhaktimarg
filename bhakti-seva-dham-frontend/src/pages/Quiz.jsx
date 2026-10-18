@@ -109,6 +109,11 @@ export default function Quiz() {
               setLanguagesData(cachedData.languages || null);
               setAlreadyAttempted(Boolean(cachedData.alreadyAttempted));
               setDailyQuizScore(cachedData.dailyQuizScore || 0);
+              setCorrectCount(
+                cachedData.dailyQuizCorrectCount !== undefined
+                  ? cachedData.dailyQuizCorrectCount
+                  : null,
+              );
               if (cachedData.alreadyAttempted) setFlowState("result");
             } else {
               setHasKatha(false);
@@ -157,6 +162,11 @@ export default function Quiz() {
           setLanguagesData(data.languages || null);
           setAlreadyAttempted(Boolean(data.alreadyAttempted));
           setDailyQuizScore(data.dailyQuizScore || 0);
+          setCorrectCount(
+            data.dailyQuizCorrectCount !== undefined
+              ? data.dailyQuizCorrectCount
+              : null,
+          );
 
           if (data.alreadyAttempted) {
             setFlowState("result");

@@ -5,14 +5,13 @@ const DailyLeaderboard = require("../models/DailyLeaderboard");
 const { protect, adminOnly } = require("../middleware/authMiddleware");
 const {
   getAppDateString,
+  getAppDateOffsetString,
 } = require("../utils/dailyLeaderboardHelper");
 const { executeDailyMidnightRollover } = require("../cron/dailyMidnightCron");
 
 // Helper: App-local date formatter YYYY-MM-DD
 const getDateString = (daysOffset = 0) => {
-  const date = new Date();
-  date.setDate(date.getDate() + daysOffset);
-  return getAppDateString(date);
+  return getAppDateOffsetString(daysOffset);
 };
 
 const finalizeSnapshot = async (date) => {
@@ -27,6 +26,18 @@ const finalizeSnapshot = async (date) => {
  * New entries are written by the quiz and jap routes as they happen.
  */
 const generateAndSaveSnapshot = async (targetDate, isFinalized = false) => {
+  const recordedLeaderboard = await DailyLeaderboard.findOne({
+    date: targetDate,
+  }).lean();
+
+  if (recordedLeaderboard?.rankings?.length) {
+    return DailyLeaderboard.findOneAndUpdate(
+      { date: targetDate },
+      { $set: { isFinalized } },
+      { new: true },
+    );
+  }
+
   const devotees = await Devotee.find({ role: "devotee" })
     .select(
       "name lastQuizDate dailyQuizAttempts dailyQuizScore dailyQuizTimeTaken lastJapDate dailyCompletedMalas",
@@ -56,6 +67,65 @@ const generateAndSaveSnapshot = async (targetDate, isFinalized = false) => {
         japPoints,
         combinedScore,
         participated,
+      };
+
+      const repairSnapshotFromCurrentActivity = async (targetDate, snapshot) => {
+        const devotees = await Devotee.find({
+          role: "devotee",
+          $or: [
+            { lastQuizDate: targetDate, dailyQuizAttempts: { $gte: 1 } },
+            { lastJapDate: targetDate, dailyCompletedMalas: { $gt: 0 } },
+          ],
+        })
+          .select(
+            "name lastQuizDate dailyQuizAttempts dailyQuizScore dailyQuizTimeTaken lastJapDate dailyCompletedMalas",
+          )
+          .lean();
+
+        if (!devotees.length) return snapshot;
+
+        const rankings = [...(snapshot?.rankings || [])];
+        devotees.forEach((d) => {
+          const quizScore =
+            d.lastQuizDate === targetDate ? d.dailyQuizScore || 0 : 0;
+          const quizTimeTaken =
+            d.lastQuizDate === targetDate ? d.dailyQuizTimeTaken || 999999 : 999999;
+          const completedMalas =
+            d.lastJapDate === targetDate ? d.dailyCompletedMalas || 0 : 0;
+          const entry = {
+            devoteeId: d._id,
+            name: d.name,
+            quizScore,
+            quizTimeTaken,
+            completedMalas,
+            japPoints: completedMalas * 5,
+            combinedScore: quizScore + completedMalas * 5,
+          };
+          const index = rankings.findIndex(
+            (ranking) => ranking.devoteeId.toString() === d._id.toString(),
+          );
+          if (index >= 0) rankings[index] = { ...rankings[index], ...entry };
+          else rankings.push(entry);
+        });
+
+        rankings.sort((a, b) => {
+          if (b.combinedScore !== a.combinedScore) {
+            return b.combinedScore - a.combinedScore;
+          }
+          if (a.quizTimeTaken !== b.quizTimeTaken) {
+            return a.quizTimeTaken - b.quizTimeTaken;
+          }
+          return b.completedMalas - a.completedMalas;
+        });
+        rankings.forEach((ranking, index) => {
+          ranking.rank = index + 1;
+        });
+
+        return DailyLeaderboard.findOneAndUpdate(
+          { date: targetDate },
+          { date: targetDate, rankings, isFinalized: true },
+          { upsert: true, new: true, setDefaultsOnInsert: true },
+        );
       };
     })
     .filter((item) => item.participated)
@@ -190,6 +260,11 @@ router.get("/", async (req, res) => {
         true,
       );
     }
+
+    snapshot = await repairSnapshotFromCurrentActivity(
+      requestedDate,
+      snapshot,
+    );
 
     const formattedPast = (snapshot?.rankings || []).map((r) => ({
       _id: r.devoteeId,

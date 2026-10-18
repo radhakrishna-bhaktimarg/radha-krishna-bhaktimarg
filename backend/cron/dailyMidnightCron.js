@@ -1,15 +1,15 @@
 const cron = require("node-cron");
 const Devotee = require("../models/Devotee");
 const DailyLeaderboard = require("../models/DailyLeaderboard");
-const { getAppDateString } = require("../utils/dailyLeaderboardHelper");
+const {
+  getAppDateOffsetString,
+} = require("../utils/dailyLeaderboardHelper");
 
 const APP_TIME_ZONE = process.env.APP_TIME_ZONE || "Asia/Kolkata";
 
 // Helper: App-local date formatter YYYY-MM-DD
 const getDateString = (daysOffset = 0) => {
-  const date = new Date();
-  date.setDate(date.getDate() + daysOffset);
-  return getAppDateString(date);
+  return getAppDateOffsetString(daysOffset);
 };
 
 // Snapshot generator & day reset logic
@@ -96,6 +96,7 @@ const executeDailyMidnightRollover = async () => {
       {
         $set: {
           dailyQuizScore: 0,
+          dailyQuizCorrectCount: 0,
           dailyQuizAttempts: 0,
           dailyQuizTimeTaken: 999999,
           dailyCompletedMalas: 0,

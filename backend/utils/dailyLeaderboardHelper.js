@@ -17,6 +17,14 @@ const getAppDateString = (date = new Date()) => {
   return `${values.year}-${values.month}-${values.day}`;
 };
 
+const getAppDateOffsetString = (daysOffset = 0) => {
+  const todayParts = getAppDateString().split("-").map(Number);
+  const date = new Date(
+    Date.UTC(todayParts[0], todayParts[1] - 1, todayParts[2] + daysOffset, 12),
+  );
+  return getAppDateString(date);
+};
+
 const sortRankings = (rankings) =>
   rankings
     .sort((a, b) => {
@@ -81,5 +89,6 @@ const recordDailyLeaderboardEntry = async ({
 
 module.exports = {
   getAppDateString,
+  getAppDateOffsetString,
   recordDailyLeaderboardEntry,
 };

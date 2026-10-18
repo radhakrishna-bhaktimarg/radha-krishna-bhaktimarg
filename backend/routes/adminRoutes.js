@@ -1,6 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const { protect, adminOnly } = require("../middleware/authMiddleware");
+const { getAppDateString } = require("../utils/dailyLeaderboardHelper");
 const Devotee = require("../models/Devotee");
 const Question = require("../models/Question");
 
@@ -57,7 +58,7 @@ router.post("/questions", protect, adminOnly, async (req, res) => {
     }
 
     // Default to today's date (YYYY-MM-DD) if not explicitly passed
-    const targetDate = scheduledDate || new Date().toISOString().split("T")[0];
+    const targetDate = scheduledDate || getAppDateString();
 
     const newQuestion = await Question.create({
       question: question.trim(),

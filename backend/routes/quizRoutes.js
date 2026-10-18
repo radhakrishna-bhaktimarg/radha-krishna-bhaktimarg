@@ -5,17 +5,14 @@ const Devotee = require("../models/Devotee");
 const { protect, adminOnly } = require("../middleware/authMiddleware");
 const { autoTranslateKathaAndQuestions } = require("../utils/translateHelper");
 const {
+  getAppDateString,
   recordDailyLeaderboardEntry,
 } = require("../utils/dailyLeaderboardHelper");
 
 const translationJobs = new Map();
 
 const getTodayDateString = () => {
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = String(now.getMonth() + 1).padStart(2, "0");
-  const day = String(now.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
+  return getAppDateString();
 };
 
 const getCurrentWeekTag = () => {
@@ -141,6 +138,11 @@ router.get("/today-katha", protect, async (req, res) => {
       alreadyAttempted: hasAttemptedToday,
       dailyQuizScore:
         devotee.lastQuizDate === today ? devotee.dailyQuizScore : 0,
+      dailyQuizCorrectCount:
+        devotee.lastQuizDate === today
+          ? devotee.dailyQuizCorrectCount ||
+            Math.round(((devotee.dailyQuizScore || 0) / 100) * (katha.questions || []).length)
+          : 0,
       katha: {
         _id: katha._id,
         title: katha.title,
@@ -234,6 +236,7 @@ router.post("/submit-daily", protect, async (req, res) => {
 
     // Save score, duration (seconds), and attempt status
     devotee.dailyQuizScore = earnedScore;
+    devotee.dailyQuizCorrectCount = correctCount;
     devotee.dailyQuizTimeTaken = Math.max(
       1,
       Number(timeTakenSeconds) || 999999,
@@ -267,6 +270,7 @@ router.post("/submit-daily", protect, async (req, res) => {
       totalQuestions,
       earnedScore,
       dailyQuizScore: devotee.dailyQuizScore,
+      dailyQuizCorrectCount: devotee.dailyQuizCorrectCount,
       dailyQuizTimeTaken: devotee.dailyQuizTimeTaken,
       totalScore: devotee.totalScore,
       message: "Daily quiz safalpurvak darj hua!",
@@ -296,9 +300,9 @@ router.post("/admin/katha", protect, adminOnly, async (req, res) => {
     }
 
     const today = getTodayDateString();
-    const maxDate = new Date();
-    maxDate.setDate(maxDate.getDate() + 30);
-    const maxDateString = maxDate.toISOString().split("T")[0];
+    const maxDateString = getAppDateString(
+      new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+    );
 
     if (scheduledDate < today) {
       return res.status(400).json({

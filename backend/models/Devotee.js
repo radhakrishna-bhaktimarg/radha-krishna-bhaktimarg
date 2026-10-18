@@ -39,6 +39,10 @@ const devoteeSchema = new mongoose.Schema(
       type: Number,
       default: 0, // Today's quiz score (0 to 100)
     },
+    dailyQuizCorrectCount: {
+      type: Number,
+      default: 0,
+    },
     dailyQuizTimeTaken: {
       type: Number,
       default: 999999, // Time in seconds (lower is faster; defaults high for unattempted)
