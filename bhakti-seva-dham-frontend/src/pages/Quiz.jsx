@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from "react";
-import { Link } from "react-router-dom";
+import React, { useState, useEffect, useRef } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import {
   Sparkles,
   BookOpen,
@@ -27,8 +27,18 @@ const LANG_CONFIG = [
   { code: "sa", label: "संस्कृतम्" },
 ];
 
+const QUIZ_CACHE_TTL_MS = 5 * 60 * 1000;
+const getTodayDateString = () => {
+  const date = new Date();
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+};
+const getQuizCacheKey = (devotee) =>
+  `daily_quiz_katha_${devotee?._id || devotee?.email || "user"}_${getTodayDateString()}`;
+
 export default function Quiz() {
   const { devotee } = useAuth();
+  const navigate = useNavigate();
+  const submitAttemptRef = useRef(null);
   const [userName, setUserName] = useState(() => {
     return (
       devotee?.name || localStorage.getItem("bhakti_devotee_name") || "Devotee"
@@ -83,6 +93,35 @@ export default function Quiz() {
   const fetchTodayKathaQuiz = async () => {
     try {
       setLoading(true);
+      const cacheKey = getQuizCacheKey(devotee);
+      const cached = sessionStorage.getItem(cacheKey);
+      if (cached) {
+        try {
+          const parsed = JSON.parse(cached);
+          if (Date.now() - parsed.savedAt < QUIZ_CACHE_TTL_MS) {
+            const cachedData = parsed.data;
+            if (cachedData.success && cachedData.hasKatha) {
+              setHasKatha(true);
+              setRawKatha(cachedData.katha);
+              setLanguagesData(cachedData.languages || null);
+              setAlreadyAttempted(Boolean(cachedData.alreadyAttempted));
+              setDailyQuizScore(cachedData.dailyQuizScore || 0);
+              if (cachedData.alreadyAttempted) setFlowState("result");
+            } else {
+              setHasKatha(false);
+              setBlankMessage(
+                cachedData.message ||
+                  "Till this time no Katha or Quiz is added, please come back after some time.",
+              );
+            }
+            setLoading(false);
+            return;
+          }
+        } catch {
+          sessionStorage.removeItem(cacheKey);
+        }
+        sessionStorage.removeItem(cacheKey);
+      }
       const storedUser = localStorage.getItem("bhakti_devotee");
       const token =
         devotee?.token || (storedUser ? JSON.parse(storedUser).token : null);
@@ -95,6 +134,12 @@ export default function Quiz() {
       });
 
       const data = await res.json();
+      if (data.success) {
+        sessionStorage.setItem(
+          cacheKey,
+          JSON.stringify({ savedAt: Date.now(), data }),
+        );
+      }
 
       if (data.success) {
         if (!data.hasKatha) {
@@ -207,7 +252,9 @@ export default function Quiz() {
       });
 
       const data = await res.json();
+
       if (data.success) {
+        sessionStorage.removeItem(getQuizCacheKey(devotee));
         setEarnedScore(data.earnedScore);
         setCorrectCount(
           data.correctCount !== undefined ? data.correctCount : null,
@@ -216,16 +263,74 @@ export default function Quiz() {
         setCompletedDuration(timeTakenSeconds);
         setAlreadyAttempted(true);
         setFlowState("result");
+        return true;
       } else {
         alert(data.message || "Submission failed");
+        return false;
       }
     } catch (err) {
       console.error(err);
       alert("Submission me samasya aayi. Kripya punah prayas karein.");
+      return false;
     } finally {
       setSubmitting(false);
     }
   };
+
+  useEffect(() => {
+    submitAttemptRef.current = handleSubmit;
+  });
+
+  useEffect(() => {
+    if (flowState !== "quiz") return undefined;
+
+    const handleRouteLeave = (event) => {
+      const link = event.target.closest?.("a[href]");
+      if (!link || link.target === "_blank" || link.hasAttribute("download")) {
+        return;
+      }
+      const destination = new URL(link.href, window.location.href);
+      if (
+        destination.origin !== window.location.origin ||
+        destination.pathname === window.location.pathname
+      ) {
+        return;
+      }
+
+      if (
+        !window.confirm(
+          "Aapka quiz abhi chal raha hai. Kya aap leave karna chahte hain? Aapke answers automatically submit ho jayenge.",
+        )
+      ) {
+        event.preventDefault();
+        event.stopPropagation();
+        return;
+      }
+
+      event.preventDefault();
+      event.stopPropagation();
+      submitAttemptRef.current?.().then((submitted) => {
+        if (submitted) {
+          navigate(
+            `${destination.pathname}${destination.search}${destination.hash}`,
+          );
+        }
+      });
+    };
+
+    document.addEventListener("click", handleRouteLeave, true);
+    return () => document.removeEventListener("click", handleRouteLeave, true);
+  }, [flowState, navigate]);
+
+  useEffect(() => {
+    if (flowState !== "quiz") return undefined;
+    const handleBeforeUnload = (event) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, [flowState]);
 
   const formatSeconds = (sec) => {
     if (!sec) return null;
