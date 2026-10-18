@@ -23,6 +23,20 @@ export default function Navbar() {
 
   const closeMenu = () => setIsOpen(false);
 
+  const protectQuizNavigation = (event, destination) => {
+    if (window.location.pathname !== "/quiz") return;
+
+    const navigationEvent = new CustomEvent("quiz-navigation-attempt", {
+      cancelable: true,
+      detail: { destination },
+    });
+    const allowed = window.dispatchEvent(navigationEvent);
+    if (!allowed) {
+      event.preventDefault();
+      closeMenu();
+    }
+  };
+
   const handleLogout = () => {
     logoutDevotee();
     closeMenu();
@@ -214,7 +228,15 @@ export default function Navbar() {
       {/* Mobile Drawer */}
       {isOpen && (
         <div className="site-nav-drawer">
-          <NavLink to="/" end onClick={closeMenu} className="drawer-link">
+          <NavLink
+            to="/"
+            end
+            onClick={(event) => {
+              protectQuizNavigation(event, "/");
+              closeMenu();
+            }}
+            className="drawer-link"
+          >
             <House size={17} aria-hidden="true" />
             <span>Home</span>
           </NavLink>
@@ -224,19 +246,29 @@ export default function Navbar() {
             <>
               <NavLink
                 to="/profile"
-                onClick={closeMenu}
+                onClick={(event) => {
+                  protectQuizNavigation(event, "/profile");
+                  closeMenu();
+                }}
                 className="drawer-link"
               >
                 <User size={17} aria-hidden="true" />
                 <span>My Profile</span>
               </NavLink>
-              <NavLink to="/quiz" onClick={closeMenu} className="drawer-link">
+              <NavLink
+                to="/quiz"
+                onClick={closeMenu}
+                className="drawer-link"
+              >
                 <Sparkles size={17} aria-hidden="true" />
                 <span>Daily Quiz</span>
               </NavLink>
               <NavLink
                 to="/leaderboard"
-                onClick={closeMenu}
+                onClick={(event) => {
+                  protectQuizNavigation(event, "/leaderboard");
+                  closeMenu();
+                }}
                 className="drawer-link"
               >
                 <Trophy size={17} aria-hidden="true" />
@@ -244,17 +276,34 @@ export default function Navbar() {
               </NavLink>
               <NavLink
                 to="/bhajans"
-                onClick={closeMenu}
+                onClick={(event) => {
+                  protectQuizNavigation(event, "/bhajans");
+                  closeMenu();
+                }}
                 className="drawer-link"
               >
                 <Music2 size={17} aria-hidden="true" />
                 <span>Bhajans &amp; Mantras</span>
               </NavLink>
-              <NavLink to="/jap" onClick={closeMenu} className="drawer-link">
+              <NavLink
+                to="/jap"
+                onClick={(event) => {
+                  protectQuizNavigation(event, "/jap");
+                  closeMenu();
+                }}
+                className="drawer-link"
+              >
                 <Sparkles size={17} aria-hidden="true" />
                 <span>Naam Jap</span>
               </NavLink>
-              <NavLink to="/seva" onClick={closeMenu} className="drawer-link">
+              <NavLink
+                to="/seva"
+                onClick={(event) => {
+                  protectQuizNavigation(event, "/seva");
+                  closeMenu();
+                }}
+                className="drawer-link"
+              >
                 <HeartHandshake size={17} aria-hidden="true" />
                 <span>Voluntary Seva</span>
               </NavLink>

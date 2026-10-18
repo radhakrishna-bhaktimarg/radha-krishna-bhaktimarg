@@ -365,6 +365,26 @@ export default function Quiz() {
 
   useEffect(() => {
     if (flowState !== "quiz") return undefined;
+
+    const handleQuizNavigationAttempt = (event) => {
+      if (!event.detail?.destination) return;
+      event.preventDefault();
+      setPendingLeave(event.detail.destination);
+    };
+
+    window.addEventListener(
+      "quiz-navigation-attempt",
+      handleQuizNavigationAttempt,
+    );
+    return () =>
+      window.removeEventListener(
+        "quiz-navigation-attempt",
+        handleQuizNavigationAttempt,
+      );
+  }, [flowState]);
+
+  useEffect(() => {
+    if (flowState !== "quiz") return undefined;
     const handleBeforeUnload = (event) => {
       event.preventDefault();
       event.returnValue = "";
