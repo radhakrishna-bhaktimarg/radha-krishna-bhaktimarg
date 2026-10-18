@@ -66,6 +66,7 @@ export default function Quiz() {
   const [quizStartTime, setQuizStartTime] = useState(null);
   const [completedDuration, setCompletedDuration] = useState(null);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  const [pendingLeave, setPendingLeave] = useState(null);
 
   useEffect(() => {
     if (devotee?.name) {
@@ -297,25 +298,11 @@ export default function Quiz() {
         return;
       }
 
-      if (
-        !window.confirm(
-          "Aapka quiz abhi chal raha hai. Kya aap leave karna chahte hain? Aapke answers automatically submit ho jayenge.",
-        )
-      ) {
-        event.preventDefault();
-        event.stopPropagation();
-        return;
-      }
-
       event.preventDefault();
       event.stopPropagation();
-      submitAttemptRef.current?.().then((submitted) => {
-        if (submitted) {
-          navigate(
-            `${destination.pathname}${destination.search}${destination.hash}`,
-          );
-        }
-      });
+      setPendingLeave(
+        `${destination.pathname}${destination.search}${destination.hash}`,
+      );
     };
 
     document.addEventListener("click", handleRouteLeave, true);
@@ -386,6 +373,14 @@ export default function Quiz() {
     </div>
   );
 
+  const confirmLeaveQuiz = async () => {
+    if (!pendingLeave) return;
+    const destination = pendingLeave;
+    setPendingLeave(null);
+    const submitted = await submitAttemptRef.current?.();
+    if (submitted) navigate(destination);
+  };
+
   if (loading) {
     return (
       <div className="quiz-page">
@@ -410,6 +405,41 @@ export default function Quiz() {
   if (!hasKatha) {
     return (
       <div className="quiz-page">
+        {pendingLeave && (
+          <div className="quiz-leave-modal-backdrop" role="presentation">
+            <div
+              className="quiz-leave-modal"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="quiz-leave-title"
+            >
+              <div className="quiz-leave-icon">
+                <Clock size={24} />
+              </div>
+              <h2 id="quiz-leave-title">Quiz chhodna hai?</h2>
+              <p>
+                Aapka quiz abhi chal raha hai. Leave karne par aapke current
+                answers automatically submit ho jayenge.
+              </p>
+              <div className="quiz-leave-actions">
+                <button
+                  type="button"
+                  className="quiz-leave-stay-btn"
+                  onClick={() => setPendingLeave(null)}
+                >
+                  Quiz par wapas jayein
+                </button>
+                <button
+                  type="button"
+                  className="quiz-leave-confirm-btn"
+                  onClick={confirmLeaveQuiz}
+                >
+                  Submit &amp; Leave
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
         <div className="quiz-container">
           <div className="quiz-blank-card">
             <Clock size={46} color="#b85b00" style={{ margin: "0 auto" }} />
