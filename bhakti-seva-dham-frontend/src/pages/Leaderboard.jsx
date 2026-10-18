@@ -28,19 +28,32 @@ export default function Leaderboard() {
   const [selectedDate, setSelectedDate] = useState(getTodayDateString());
   const [availableDates, setAvailableDates] = useState([]);
   const [isLive, setIsLive] = useState(true);
+  const [hasMore, setHasMore] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
 
-  const fetchLeaderboard = async (dateParam = "") => {
+  const fetchLeaderboard = async (
+    dateParam = "",
+    metricParam = filter,
+    offset = 0,
+  ) => {
     try {
-      setLoading(true);
+      if (offset === 0) {
+        setLoading(true);
+      } else {
+        setLoadingMore(true);
+      }
       const targetDate = dateParam || getTodayDateString();
-      const url = `${API_BASE_URL}/leaderboard?date=${targetDate}`;
+      const url = `${API_BASE_URL}/leaderboard?date=${targetDate}&metric=${metricParam}&limit=10&offset=${offset}`;
 
       const res = await fetch(url);
       const data = await res.json();
       if (data.success && Array.isArray(data.devotees)) {
-        setDevotees(data.devotees);
+        setDevotees((current) =>
+          offset === 0 ? data.devotees : [...current, ...data.devotees],
+        );
         setSelectedDate(data.selectedDate || targetDate);
         setIsLive(Boolean(data.isLive));
+        setHasMore(Boolean(data.hasMore));
         if (Array.isArray(data.availableDates)) {
           setAvailableDates(data.availableDates);
         }
@@ -48,13 +61,17 @@ export default function Leaderboard() {
     } catch (err) {
       console.error("Failed to load leaderboard:", err);
     } finally {
-      setLoading(false);
+      if (offset === 0) {
+        setLoading(false);
+      } else {
+        setLoadingMore(false);
+      }
     }
   };
 
   useEffect(() => {
-    fetchLeaderboard(getTodayDateString());
-  }, []);
+    fetchLeaderboard(selectedDate, filter);
+  }, [filter]);
 
   // Multi-tier sorting: Score (DESC) -> Quiz Time Taken (ASC) -> Malas (DESC)
   const sortedDevotees = [...devotees].sort((a, b) => {
@@ -165,7 +182,7 @@ export default function Leaderboard() {
                   <button
                     key={d.value}
                     type="button"
-                    onClick={() => fetchLeaderboard(d.value)}
+                    onClick={() => fetchLeaderboard(d.value, filter)}
                     className={`date-pill-btn ${selectedDate === d.value ? "active-date" : ""}`}
                   >
                     {d.label}
@@ -308,6 +325,17 @@ export default function Leaderboard() {
               </div>
             )}
           </>
+        )}
+
+        {!loading && hasMore && (
+          <button
+            type="button"
+            className="leaderboard-load-more"
+            onClick={() => fetchLeaderboard(selectedDate, filter, devotees.length)}
+            disabled={loadingMore}
+          >
+            {loadingMore ? "Loading..." : "Load More"}
+          </button>
         )}
 
         <div className="scroll-footer-decor">

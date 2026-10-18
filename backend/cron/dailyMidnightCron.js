@@ -2,14 +2,24 @@ const cron = require("node-cron");
 const Devotee = require("../models/Devotee");
 const DailyLeaderboard = require("../models/DailyLeaderboard");
 
-// Helper: Formats YYYY-MM-DD
+const APP_TIME_ZONE = process.env.APP_TIME_ZONE || "Asia/Kolkata";
+
+// Helper: App-local date formatter YYYY-MM-DD
 const getDateString = (daysOffset = 0) => {
-  const d = new Date();
-  d.setDate(d.getDate() + daysOffset);
-  const year = d.getFullYear();
-  const month = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
+  const date = new Date();
+  date.setDate(date.getDate() + daysOffset);
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: APP_TIME_ZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(date);
+  const values = Object.fromEntries(
+    parts
+      .filter(({ type }) => type !== "literal")
+      .map(({ type, value }) => [type, value]),
+  );
+  return `${values.year}-${values.month}-${values.day}`;
 };
 
 // Snapshot generator & day reset logic
@@ -25,7 +35,7 @@ const executeDailyMidnightRollover = async () => {
     // 1. Gather all devotees and compute their final scores for yesterday
     const devotees = await Devotee.find({ role: "devotee" })
       .select(
-        "name lastQuizDate dailyQuizScore dailyQuizTimeTaken lastJapDate dailyCompletedMalas",
+        "name lastQuizDate dailyQuizAttempts dailyQuizScore dailyQuizTimeTaken lastJapDate dailyCompletedMalas",
       )
       .lean();
 
@@ -50,9 +60,13 @@ const executeDailyMidnightRollover = async () => {
           completedMalas: malas,
           japPoints,
           combinedScore,
+          participated:
+            (d.lastQuizDate === yesterday &&
+              (d.dailyQuizAttempts || 0) >= 1) ||
+            (d.lastJapDate === yesterday && (d.dailyCompletedMalas || 0) > 0),
         };
       })
-      .filter((item) => item.combinedScore > 0) // Keep participants who scored
+      .filter((item) => item.participated)
       .sort((a, b) => {
         if (b.combinedScore !== a.combinedScore)
           return b.combinedScore - a.combinedScore;
@@ -107,7 +121,7 @@ const executeDailyMidnightRollover = async () => {
 const startMidnightCron = () => {
   cron.schedule("0 0 * * *", () => {
     executeDailyMidnightRollover();
-  });
+  }, { timezone: APP_TIME_ZONE });
   console.log(
     "⏳ [CRON] Midnight Rollover scheduler initialized (runs daily at 00:00).",
   );

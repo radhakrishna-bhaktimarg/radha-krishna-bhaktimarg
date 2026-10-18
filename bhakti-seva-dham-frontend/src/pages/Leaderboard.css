@@ -248,6 +248,29 @@
   gap: 8px;
 }
 
+.leaderboard-load-more {
+  margin-top: 18px;
+  background: #ffffff;
+  color: #5c141d;
+  border: 1px solid #d4af37;
+  border-radius: 999px;
+  padding: 9px 22px;
+  font-size: 0.85rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.2s ease, color 0.2s ease;
+}
+
+.leaderboard-load-more:hover:not(:disabled) {
+  background: #5c141d;
+  color: #ffffff;
+}
+
+.leaderboard-load-more:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
 .ranking-plaque {
   width: 100%;
   background: #ffffff;

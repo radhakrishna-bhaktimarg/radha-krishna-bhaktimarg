@@ -5,26 +5,39 @@ const DailyLeaderboard = require("../models/DailyLeaderboard");
 const { protect, adminOnly } = require("../middleware/authMiddleware");
 const { executeDailyMidnightRollover } = require("../cron/dailyMidnightCron");
 
-// Helper: Local date formatter YYYY-MM-DD
+const APP_TIME_ZONE = process.env.APP_TIME_ZONE || "Asia/Kolkata";
+
+// Helper: App-local date formatter YYYY-MM-DD
 const getDateString = (daysOffset = 0) => {
-  const d = new Date();
-  d.setDate(d.getDate() + daysOffset);
-  const year = d.getFullYear();
-  const month = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
+  const date = new Date();
+  date.setDate(date.getDate() + daysOffset);
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: APP_TIME_ZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(date);
+  const values = Object.fromEntries(
+    parts
+      .filter(({ type }) => type !== "literal")
+      .map(({ type, value }) => [type, value]),
+  );
+  return `${values.year}-${values.month}-${values.day}`;
 };
 
 // Snapshot generator for historical dates if not already archived
-const generateAndSaveSnapshot = async (targetDate) => {
+const generateAndSaveSnapshot = async (targetDate, isFinalized = false) => {
   const devotees = await Devotee.find({ role: "devotee" })
     .select(
-      "name lastQuizDate dailyQuizScore dailyQuizTimeTaken lastJapDate dailyCompletedMalas",
+      "name lastQuizDate dailyQuizAttempts dailyQuizScore dailyQuizTimeTaken lastJapDate dailyCompletedMalas",
     )
     .lean();
 
   const formatted = devotees
     .map((d) => {
+      const participated =
+        (d.lastQuizDate === targetDate && (d.dailyQuizAttempts || 0) >= 1) ||
+        (d.lastJapDate === targetDate && (d.dailyCompletedMalas || 0) > 0);
       const quizScore =
         d.lastQuizDate === targetDate ? d.dailyQuizScore || 0 : 0;
       const quizTimeTaken =
@@ -42,8 +55,10 @@ const generateAndSaveSnapshot = async (targetDate) => {
         completedMalas: malas,
         japPoints,
         combinedScore,
+        participated,
       };
     })
+    .filter((item) => item.participated)
     .sort((a, b) => {
       if (b.combinedScore !== a.combinedScore) {
         return b.combinedScore - a.combinedScore;
@@ -57,7 +72,7 @@ const generateAndSaveSnapshot = async (targetDate) => {
 
   const record = await DailyLeaderboard.findOneAndUpdate(
     { date: targetDate },
-    { date: targetDate, rankings: formatted, isFinalized: true },
+    { date: targetDate, rankings: formatted, isFinalized },
     { upsert: true, new: true, setDefaultsOnInsert: true },
   );
 
@@ -71,6 +86,11 @@ router.get("/", async (req, res) => {
     const today = getDateString(0);
     const requestedDate = req.query.date || today;
     const isLiveToday = requestedDate === today;
+    const metric = ["combined", "daily", "jap"].includes(req.query.metric)
+      ? req.query.metric
+      : "combined";
+    const limit = Math.min(Math.max(Number(req.query.limit) || 10, 1), 50);
+    const offset = Math.max(Number(req.query.offset) || 0, 0);
 
     // Available viewing dates
     const availableDates = [
@@ -82,9 +102,15 @@ router.get("/", async (req, res) => {
 
     // Case 1: Live Today's Leaderboard
     if (isLiveToday) {
-      const devotees = await Devotee.find({ role: "devotee" })
+      const devotees = await Devotee.find({
+        role: "devotee",
+        $or: [
+          { lastQuizDate: today, dailyQuizAttempts: { $gte: 1 } },
+          { lastJapDate: today, dailyCompletedMalas: { $gt: 0 } },
+        ],
+      })
         .select(
-          "name lastQuizDate dailyQuizScore dailyQuizTimeTaken lastJapDate dailyCompletedMalas japScore totalScore",
+          "name lastQuizDate dailyQuizAttempts dailyQuizScore dailyQuizTimeTaken lastJapDate dailyCompletedMalas japScore totalScore",
         )
         .lean();
 
@@ -112,19 +138,36 @@ router.get("/", async (req, res) => {
           };
         })
         .sort((a, b) => {
-          if (b.combinedScore !== a.combinedScore)
+          if (metric === "daily") {
+            if (b.todayQuizScore !== a.todayQuizScore) {
+              return b.todayQuizScore - a.todayQuizScore;
+            }
+            if (a.quizTimeTaken !== b.quizTimeTaken) {
+              return a.quizTimeTaken - b.quizTimeTaken;
+            }
+            return b.completedMalas - a.completedMalas;
+          }
+          if (metric === "jap") {
+            return b.completedMalas - a.completedMalas;
+          }
+          if (b.combinedScore !== a.combinedScore) {
             return b.combinedScore - a.combinedScore;
-          if (a.quizTimeTaken !== b.quizTimeTaken)
+          }
+          if (a.quizTimeTaken !== b.quizTimeTaken) {
             return a.quizTimeTaken - b.quizTimeTaken;
+          }
           return b.completedMalas - a.completedMalas;
         });
+
+      const paginated = formatted.slice(offset, offset + limit);
 
       return res.json({
         success: true,
         selectedDate: today,
         isLive: true,
         availableDates,
-        devotees: formatted,
+        devotees: paginated,
+        hasMore: offset + paginated.length < formatted.length,
       });
     }
 
@@ -133,8 +176,19 @@ router.get("/", async (req, res) => {
       date: requestedDate,
     }).lean();
 
-    if (!snapshot) {
-      snapshot = await generateAndSaveSnapshot(requestedDate);
+    if (
+      requestedDate === getDateString(-1) &&
+      (!snapshot || !snapshot.isFinalized)
+    ) {
+      await executeDailyMidnightRollover();
+      snapshot = await DailyLeaderboard.findOne({
+        date: requestedDate,
+      }).lean();
+    } else if (!snapshot || !snapshot.isFinalized) {
+      snapshot = await generateAndSaveSnapshot(
+        requestedDate,
+        true,
+      );
     }
 
     const formattedPast = (snapshot?.rankings || []).map((r) => ({
@@ -148,12 +202,36 @@ router.get("/", async (req, res) => {
       rank: r.rank,
     }));
 
+    formattedPast.sort((a, b) => {
+      if (metric === "daily") {
+        if (b.todayQuizScore !== a.todayQuizScore) {
+          return b.todayQuizScore - a.todayQuizScore;
+        }
+        if (a.quizTimeTaken !== b.quizTimeTaken) {
+          return a.quizTimeTaken - b.quizTimeTaken;
+        }
+        return b.completedMalas - a.completedMalas;
+      }
+      if (metric === "jap") {
+        return b.completedMalas - a.completedMalas;
+      }
+      if (b.combinedScore !== a.combinedScore) {
+        return b.combinedScore - a.combinedScore;
+      }
+      if (a.quizTimeTaken !== b.quizTimeTaken) {
+        return a.quizTimeTaken - b.quizTimeTaken;
+      }
+      return b.completedMalas - a.completedMalas;
+    });
+    const paginatedPast = formattedPast.slice(offset, offset + limit);
+
     res.json({
       success: true,
       selectedDate: requestedDate,
       isLive: false,
       availableDates,
-      devotees: formattedPast,
+      devotees: paginatedPast,
+      hasMore: offset + paginatedPast.length < formattedPast.length,
     });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
