@@ -25,6 +25,8 @@ export default function NaamJap() {
   const [beadCount, setBeadCount] = useState(0); // 0 to 108
   const [todayMalas, setTodayMalas] = useState(0);
   const [lifetimeJap, setLifetimeJap] = useState(0);
+  const [syncError, setSyncError] = useState("");
+  const pendingSyncRef = useRef(null);
 
   const [audioEnabled, setAudioEnabled] = useState(true);
   const [targetMala, setTargetMala] = useState(1);
@@ -62,15 +64,15 @@ export default function NaamJap() {
   }, [devotee]);
 
   // Send delta (+1 mala or -1 mala) to backend
-  const syncDeltaWithBackend = async (deltaMalas, deltaBeads) => {
+  const syncDeltaWithBackend = async (
+    deltaMalas,
+    deltaBeads,
+    operationId,
+  ) => {
     const token = getToken();
     if (!token) return;
 
     try {
-      const operationId =
-        typeof globalThis.crypto?.randomUUID === "function"
-          ? globalThis.crypto.randomUUID()
-          : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
       const res = await fetch(`${API_BASE_URL}/jap/sync`, {
         method: "POST",
         headers: {
@@ -81,12 +83,37 @@ export default function NaamJap() {
       });
 
       const data = await res.json();
+      if (!res.ok || !data?.success) {
+        throw new Error(data?.message || "Naam Jap sync failed.");
+      }
       if (data?.success && data.devotee) {
         setTodayMalas(data.devotee.todayCompletedMalas);
         setLifetimeJap(data.devotee.lifetimeJap);
       }
+      pendingSyncRef.current = null;
+      setSyncError("");
     } catch (err) {
       console.error("Sync delta error:", err);
+      pendingSyncRef.current = { deltaMalas, deltaBeads, operationId };
+      setSyncError(
+        "Points sync nahi ho paye. Retry karein; current action dobara count nahi hoga.",
+      );
+    }
+  };
+
+  const createOperationId = () =>
+    typeof globalThis.crypto?.randomUUID === "function"
+      ? globalThis.crypto.randomUUID()
+      : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
+  const retrySync = () => {
+    const pendingSync = pendingSyncRef.current;
+    if (pendingSync) {
+      syncDeltaWithBackend(
+        pendingSync.deltaMalas,
+        pendingSync.deltaBeads,
+        pendingSync.operationId,
+      );
     }
   };
 
@@ -145,7 +172,7 @@ export default function NaamJap() {
       setTodayMalas((prev) => prev + 1);
       playChantTone(true);
       // Increment 1 mala and 108 beads in database
-      syncDeltaWithBackend(1, 108);
+      syncDeltaWithBackend(1, 108, createOperationId());
     } else {
       setBeadCount(nextBead);
       playChantTone(false);
@@ -161,7 +188,7 @@ export default function NaamJap() {
       setBeadCount(107);
       setLifetimeJap((prev) => Math.max(0, prev - 1));
       // Decrement 1 mala and 1 bead in database
-      syncDeltaWithBackend(-1, -1);
+      syncDeltaWithBackend(-1, -1, createOperationId());
     }
   };
 
@@ -276,6 +303,25 @@ export default function NaamJap() {
                 {todayMalas} <small>/ {targetMala}</small>
               </strong>
             </div>
+            {syncError && (
+              <div
+                role="alert"
+                style={{
+                  color: "#7a1f1f",
+                  background: "#fff1e8",
+                  border: "1px solid #e2a77d",
+                  borderRadius: "10px",
+                  margin: "12px 0",
+                  padding: "10px",
+                  textAlign: "center",
+                }}
+              >
+                <span>{syncError}</span>
+                <button type="button" onClick={retrySync}>
+                  Retry sync
+                </button>
+              </div>
+            )}
 
             <div className="jap-metric-divider" />
 

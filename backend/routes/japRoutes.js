@@ -7,6 +7,7 @@ const {
   recordDailyLeaderboardEntry,
   getAppDateString,
 } = require("../utils/dailyLeaderboardHelper");
+const { withLeaderboardLock } = require("../utils/leaderboardLock");
 
 const protect = authMiddleware.protect || authMiddleware;
 
@@ -17,7 +18,7 @@ const getLocalDateString = () => {
 
 // @route   POST /api/jap/sync
 // @desc    Increment completed mala and lifetime beads by delta
-router.post("/sync", protect, async (req, res) => {
+const syncJap = async (req, res) => {
   try {
     const { deltaMalas, deltaBeads, operationId } = req.body;
     const devotee = req.user;
@@ -170,6 +171,18 @@ router.post("/sync", protect, async (req, res) => {
     const statusCode =
       error.code === "LEADERBOARD_FINALIZED" ? 409 : 503;
     res.status(statusCode).json({ success: false, message: error.message });
+  }
+};
+
+router.post("/sync", protect, async (req, res) => {
+  try {
+    return await withLeaderboardLock(() => syncJap(req, res));
+  } catch (error) {
+    const statusCode =
+      error.code === "LEADERBOARD_LOCK_TIMEOUT" ? 503 : 500;
+    return res
+      .status(statusCode)
+      .json({ success: false, message: error.message });
   }
 });
 

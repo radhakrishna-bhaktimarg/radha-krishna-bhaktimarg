@@ -4,6 +4,7 @@ const DailyLeaderboard = require("../models/DailyLeaderboard");
 const {
   getAppDateOffsetString,
 } = require("../utils/dailyLeaderboardHelper");
+const { withLeaderboardLock } = require("../utils/leaderboardLock");
 
 const APP_TIME_ZONE = process.env.APP_TIME_ZONE || "Asia/Kolkata";
 
@@ -13,7 +14,7 @@ const getDateString = (daysOffset = 0) => {
 };
 
 // Snapshot generator & day reset logic
-const executeDailyMidnightRollover = async () => {
+const runDailyMidnightRollover = async () => {
   try {
     const yesterday = getDateString(-1);
     const today = getDateString(0);
@@ -67,6 +68,7 @@ const executeDailyMidnightRollover = async () => {
               (d.dailyQuizAttempts || 0) >= 1) ||
             (d.lastJapDate === yesterday && (d.dailyCompletedMalas || 0) > 0),
         };
+
       })
       .filter((item) => item.participated)
       .sort((a, b) => {
@@ -202,6 +204,9 @@ const executeDailyMidnightRollover = async () => {
     throw error;
   }
 };
+
+const executeDailyMidnightRollover = () =>
+  withLeaderboardLock(runDailyMidnightRollover);
 
 // Initializes the cron job to run at 00:00 every day
 const startMidnightCron = () => {
