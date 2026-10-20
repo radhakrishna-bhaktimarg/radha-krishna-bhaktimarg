@@ -107,12 +107,21 @@ const repairSnapshotFromCurrentActivity = async (targetDate, snapshot) => {
 
   const rankings = [...(snapshot?.rankings || [])];
   devotees.forEach((d) => {
-    const quizScore =
-      d.lastQuizDate === targetDate ? d.dailyQuizScore || 0 : 0;
-    const quizTimeTaken =
-      d.lastQuizDate === targetDate ? d.dailyQuizTimeTaken || 999999 : 999999;
-    const completedMalas =
-      d.lastJapDate === targetDate ? d.dailyCompletedMalas || 0 : 0;
+    const existingIndex = rankings.findIndex(
+      (ranking) => ranking.devoteeId.toString() === d._id.toString(),
+    );
+    const existing = existingIndex >= 0 ? rankings[existingIndex] : {};
+    const quizWasCompletedOnDate = d.lastQuizDate === targetDate;
+    const japWasCompletedOnDate = d.lastJapDate === targetDate;
+    const quizScore = quizWasCompletedOnDate
+      ? d.dailyQuizScore || 0
+      : existing.quizScore || 0;
+    const quizTimeTaken = quizWasCompletedOnDate
+      ? d.dailyQuizTimeTaken || 999999
+      : existing.quizTimeTaken || 999999;
+    const completedMalas = japWasCompletedOnDate
+      ? d.dailyCompletedMalas || 0
+      : existing.completedMalas || 0;
     const entry = {
       devoteeId: d._id,
       name: d.name,
@@ -122,10 +131,7 @@ const repairSnapshotFromCurrentActivity = async (targetDate, snapshot) => {
       japPoints: completedMalas * 5,
       combinedScore: quizScore + completedMalas * 5,
     };
-    const index = rankings.findIndex(
-      (ranking) => ranking.devoteeId.toString() === d._id.toString(),
-    );
-    if (index >= 0) rankings[index] = { ...rankings[index], ...entry };
+    if (existingIndex >= 0) rankings[existingIndex] = { ...existing, ...entry };
     else rankings.push(entry);
   });
 
