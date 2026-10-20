@@ -1,5 +1,5 @@
 import React from "react";
-import { BrowserRouter, Routes, Route, Link } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Link, Navigate } from "react-router-dom";
 
 import Navbar from "./components/Navbar";
 import AuthModal from "./components/AuthModal";
@@ -13,7 +13,6 @@ import ProtectedRoute from "./components/ProtectedRoute";
 import Profile from "./pages/Profile";
 import AdminDashboard from "./pages/AdminDashboard";
 import Bhajans from "./pages/Bhajans";
-import KathaBhajans from "./pages/KathaBhajans";
 import { AudioPlayerProvider } from "./context/AudioPlayerContext";
 import PersistentAudioPlayer from "./components/PersistentAudioPlayer";
 
@@ -153,11 +152,7 @@ export default function App() {
             />
             <Route
               path="/katha"
-              element={
-                <ProtectedRoute>
-                  <KathaBhajans />
-                </ProtectedRoute>
-              }
+              element={<Navigate to="/bhajans" replace />}
             />
             <Route
               path="/jap"

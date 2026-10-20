@@ -87,17 +87,17 @@ export default function Home() {
             <div className="activity-icon">
               <BookOpen size={30} />
             </div>
-            <h3>Katha &amp; Bhajans</h3>
+            <h3>Bhajans &amp; Mantras</h3>
             <p>
-              Discover spiritual notes, devotional songs and stories from
-              Sanatan Dharma.
+              Discover devotional songs, mantras and sacred music from Sanatan
+              Dharma.
             </p>
             <button
               type="button"
               className="card-link-button"
-              onClick={() => handleProtectedNavigation("/katha")}
+              onClick={() => handleProtectedNavigation("/bhajans")}
             >
-              Explore Katha →
+              Explore Bhajans →
             </button>
           </article>
 
