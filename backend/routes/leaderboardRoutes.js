@@ -1,5 +1,6 @@
 const express = require("express");
 const router = express.Router();
+const mongoose = require("mongoose");
 const Devotee = require("../models/Devotee");
 const DailyLeaderboard = require("../models/DailyLeaderboard");
 const { protect, adminOnly } = require("../middleware/authMiddleware");
@@ -258,6 +259,82 @@ router.post("/admin/trigger-rollover", protect, adminOnly, async (req, res) => {
     });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// @route   POST /api/leaderboard/admin/repair-snapshot
+// @desc    Correct explicitly confirmed historical Naam Jap totals
+router.post("/admin/repair-snapshot", protect, adminOnly, async (req, res) => {
+  try {
+    const { date, entries } = req.body;
+    if (
+      !/^\d{4}-\d{2}-\d{2}$/.test(date || "") ||
+      !Array.isArray(entries) ||
+      entries.length === 0
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "A valid date and at least one recovery entry are required.",
+      });
+    }
+
+    const snapshot = await DailyLeaderboard.findOne({ date });
+    if (!snapshot) {
+      return res.status(404).json({
+        success: false,
+        message: `Leaderboard snapshot not found for ${date}.`,
+      });
+    }
+
+    const recoveredIds = new Set();
+    entries.forEach(({ devoteeId, completedMalas }) => {
+      if (!mongoose.Types.ObjectId.isValid(devoteeId)) {
+        throw new Error(`Invalid devotee ID: ${devoteeId}`);
+      }
+      if (
+        !Number.isInteger(completedMalas) ||
+        completedMalas < 0 ||
+        completedMalas > 100000
+      ) {
+        throw new Error(`Invalid mala count for devotee ${devoteeId}`);
+      }
+
+      const ranking = snapshot.rankings.find(
+        (item) => item.devoteeId.toString() === devoteeId,
+      );
+      if (!ranking) {
+        throw new Error(`Devotee ${devoteeId} is not in the snapshot.`);
+      }
+
+      ranking.completedMalas = completedMalas;
+      ranking.japPoints = completedMalas * 5;
+      ranking.combinedScore = ranking.quizScore + ranking.japPoints;
+      recoveredIds.add(devoteeId);
+    });
+
+    snapshot.rankings.sort((a, b) => {
+      if (b.combinedScore !== a.combinedScore) {
+        return b.combinedScore - a.combinedScore;
+      }
+      if (a.quizTimeTaken !== b.quizTimeTaken) {
+        return a.quizTimeTaken - b.quizTimeTaken;
+      }
+      return b.completedMalas - a.completedMalas;
+    });
+    snapshot.rankings.forEach((ranking, index) => {
+      ranking.rank = index + 1;
+    });
+    snapshot.isFinalized = true;
+    await snapshot.save();
+
+    res.json({
+      success: true,
+      date,
+      recoveredDevotees: [...recoveredIds],
+      rankings: snapshot.rankings,
+    });
+  } catch (error) {
+    res.status(400).json({ success: false, message: error.message });
   }
 });
 
