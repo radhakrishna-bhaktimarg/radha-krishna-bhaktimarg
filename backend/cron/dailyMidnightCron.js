@@ -93,18 +93,59 @@ const executeDailyMidnightRollover = async () => {
     // 3. Reset daily metrics on all devotees for the new day
     const resetResult = await Devotee.updateMany(
       { role: "devotee" },
-      {
-        $set: {
-          dailyQuizScore: 0,
-          dailyQuizCorrectCount: 0,
-          dailyQuizAttempts: 0,
-          dailyQuizTimeTaken: 999999,
-          dailyCompletedMalas: 0,
-          japScore: 0,
-          totalScore: 0,
-          lastJapDate: today,
+      [
+        {
+          $set: {
+            dailyQuizScore: {
+              $cond: [
+                { $eq: ["$lastQuizDate", today] },
+                { $ifNull: ["$dailyQuizScore", 0] },
+                0,
+              ],
+            },
+            dailyQuizCorrectCount: {
+              $cond: [
+                { $eq: ["$lastQuizDate", today] },
+                { $ifNull: ["$dailyQuizCorrectCount", 0] },
+                0,
+              ],
+            },
+            dailyQuizAttempts: {
+              $cond: [
+                { $eq: ["$lastQuizDate", today] },
+                { $ifNull: ["$dailyQuizAttempts", 0] },
+                0,
+              ],
+            },
+            dailyQuizTimeTaken: {
+              $cond: [
+                { $eq: ["$lastQuizDate", today] },
+                { $ifNull: ["$dailyQuizTimeTaken", 999999] },
+                999999,
+              ],
+            },
+            dailyCompletedMalas: {
+              $cond: [
+                { $eq: ["$lastJapDate", today] },
+                { $ifNull: ["$dailyCompletedMalas", 0] },
+                0,
+              ],
+            },
+            lastJapDate: today,
+          },
         },
-      },
+        {
+          $set: {
+            japScore: { $multiply: [{ $ifNull: ["$dailyCompletedMalas", 0] }, 5] },
+            totalScore: {
+              $add: [
+                { $ifNull: ["$dailyQuizScore", 0] },
+                { $multiply: [{ $ifNull: ["$dailyCompletedMalas", 0] }, 5] },
+              ],
+            },
+          },
+        },
+      ],
     );
 
     console.log(

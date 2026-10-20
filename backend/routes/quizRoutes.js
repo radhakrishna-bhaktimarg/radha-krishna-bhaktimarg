@@ -227,41 +227,81 @@ router.post("/submit-daily", protect, async (req, res) => {
 
     const earnedScore = Math.round((correctCount / totalQuestions) * 100);
 
-    if (devotee.lastActiveWeek !== currentWeek) {
-      devotee.weeklyScore = 0;
-      devotee.weeklyQuizScore = 0;
-      devotee.weeklyJapScore = 0;
-      devotee.lastActiveWeek = currentWeek;
-    }
-
-    // Save score, duration (seconds), and attempt status
-    devotee.dailyQuizScore = earnedScore;
-    devotee.dailyQuizCorrectCount = correctCount;
-    devotee.dailyQuizTimeTaken = Math.max(
+    const completedTime = Math.max(
       1,
       Number(timeTakenSeconds) || 999999,
     );
-    devotee.dailyQuizAttempts = 1;
-    devotee.lastQuizDate = today;
+    const updatedDevotee = await Devotee.findOneAndUpdate(
+      {
+        _id: devotee._id,
+        lastQuizDate: { $ne: today },
+      },
+      [
+        {
+          $set: {
+            dailyQuizScore: earnedScore,
+            dailyQuizCorrectCount: correctCount,
+            dailyQuizTimeTaken: completedTime,
+            dailyQuizAttempts: 1,
+            lastQuizDate: today,
+            quizScore: { $add: [{ $ifNull: ["$quizScore", 0] }, earnedScore] },
+            weeklyQuizScore: {
+              $cond: [
+                { $eq: ["$lastActiveWeek", currentWeek] },
+                { $add: [{ $ifNull: ["$weeklyQuizScore", 0] }, earnedScore] },
+                earnedScore,
+              ],
+            },
+            weeklyScore: {
+              $cond: [
+                { $eq: ["$lastActiveWeek", currentWeek] },
+                { $add: [{ $ifNull: ["$weeklyScore", 0] }, earnedScore] },
+                earnedScore,
+              ],
+            },
+            weeklyJapScore: {
+              $cond: [
+                { $eq: ["$lastActiveWeek", currentWeek] },
+                { $ifNull: ["$weeklyJapScore", 0] },
+                0,
+              ],
+            },
+            lastActiveWeek: currentWeek,
+          },
+        },
+        {
+          $set: {
+            totalScore: {
+              $add: [
+                earnedScore,
+                {
+                  $cond: [
+                    { $eq: ["$lastJapDate", today] },
+                    { $multiply: [{ $ifNull: ["$dailyCompletedMalas", 0] }, 5] },
+                    0,
+                  ],
+                },
+              ],
+            },
+          },
+        },
+      ],
+      { new: true },
+    ).select("-password");
 
-    // Update cumulative scores
-    devotee.quizScore = (devotee.quizScore || 0) + earnedScore;
-    devotee.weeklyQuizScore = (devotee.weeklyQuizScore || 0) + earnedScore;
-    devotee.weeklyScore = (devotee.weeklyScore || 0) + earnedScore;
+    if (!updatedDevotee) {
+      return res.status(400).json({
+        success: false,
+        message: "Aap aaj ka attempt pehle hi upyog kar chuke hain.",
+      });
+    }
 
-    // Ensure totalScore includes both today's quiz and today's Jap points
-    const currentJapPts =
-      (devotee.lastJapDate === today ? devotee.dailyCompletedMalas || 0 : 0) *
-      5;
-    devotee.totalScore = earnedScore + currentJapPts;
-
-    await devotee.save();
     await recordDailyLeaderboardEntry({
-      devoteeId: devotee._id,
-      name: devotee.name,
+      devoteeId: updatedDevotee._id,
+      name: updatedDevotee.name,
       date: today,
-      quizScore: devotee.dailyQuizScore,
-      quizTimeTaken: devotee.dailyQuizTimeTaken,
+      quizScore: updatedDevotee.dailyQuizScore,
+      quizTimeTaken: updatedDevotee.dailyQuizTimeTaken,
     });
 
     res.json({
@@ -269,10 +309,10 @@ router.post("/submit-daily", protect, async (req, res) => {
       correctCount,
       totalQuestions,
       earnedScore,
-      dailyQuizScore: devotee.dailyQuizScore,
-      dailyQuizCorrectCount: devotee.dailyQuizCorrectCount,
-      dailyQuizTimeTaken: devotee.dailyQuizTimeTaken,
-      totalScore: devotee.totalScore,
+      dailyQuizScore: updatedDevotee.dailyQuizScore,
+      dailyQuizCorrectCount: updatedDevotee.dailyQuizCorrectCount,
+      dailyQuizTimeTaken: updatedDevotee.dailyQuizTimeTaken,
+      totalScore: updatedDevotee.totalScore,
       message: "Daily quiz safalpurvak darj hua!",
     });
   } catch (error) {

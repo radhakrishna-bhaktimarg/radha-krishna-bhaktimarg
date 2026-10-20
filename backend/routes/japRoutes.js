@@ -1,5 +1,6 @@
 const express = require("express");
 const router = express.Router();
+const Devotee = require("../models/Devotee");
 const authMiddleware = require("../middleware/authMiddleware");
 const {
   recordDailyLeaderboardEntry,
@@ -21,37 +22,90 @@ router.post("/sync", protect, async (req, res) => {
     const devotee = req.user;
     const today = getLocalDateString();
 
-    // Reset daily malas if chanting on a new calendar date
-    if (devotee.lastJapDate !== today) {
-      devotee.dailyCompletedMalas = 0;
-      devotee.lastJapDate = today;
-    }
-
     const malasToAdd = Number(deltaMalas) || 0;
     const beadsToAdd = Number(deltaBeads) || 0;
+    if (!Number.isFinite(malasToAdd) || !Number.isFinite(beadsToAdd)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid Naam Jap sync values.",
+      });
+    }
 
-    // Directly increment daily and lifetime totals
-    devotee.dailyCompletedMalas = Math.max(
-      0,
-      (devotee.dailyCompletedMalas || 0) + malasToAdd,
-    );
-    devotee.completedMalas = Math.max(
-      0,
-      (devotee.completedMalas || 0) + malasToAdd,
-    );
-    devotee.lifetimeJap = Math.max(0, (devotee.lifetimeJap || 0) + beadsToAdd);
+    const updatedDevotee = await Devotee.findByIdAndUpdate(
+      devotee._id,
+      [
+        {
+          $set: {
+            dailyCompletedMalas: {
+              $cond: [
+                { $eq: ["$lastJapDate", today] },
+                {
+                  $max: [
+                    0,
+                    {
+                      $add: [
+                        { $ifNull: ["$dailyCompletedMalas", 0] },
+                        malasToAdd,
+                      ],
+                    },
+                  ],
+                },
+                Math.max(0, malasToAdd),
+              ],
+            },
+            completedMalas: {
+              $max: [
+                0,
+                {
+                  $add: [{ $ifNull: ["$completedMalas", 0] }, malasToAdd],
+                },
+              ],
+            },
+            lifetimeJap: {
+              $max: [
+                0,
+                {
+                  $add: [{ $ifNull: ["$lifetimeJap", 0] }, beadsToAdd],
+                },
+              ],
+            },
+            lastJapDate: today,
+          },
+        },
+        {
+          $set: {
+            japScore: { $multiply: ["$dailyCompletedMalas", 5] },
+            totalScore: {
+              $add: [
+                {
+                  $cond: [
+                    { $eq: ["$lastQuizDate", today] },
+                    { $ifNull: ["$dailyQuizScore", 0] },
+                    0,
+                  ],
+                },
+                { $multiply: ["$dailyCompletedMalas", 5] },
+              ],
+            },
+          },
+        },
+      ],
+      { new: true },
+    ).select("-password");
 
-    // 5 points per mala
-    devotee.japScore = (devotee.dailyCompletedMalas || 0) * 5;
-    devotee.totalScore = (devotee.dailyQuizScore || 0) + devotee.japScore;
+    if (!updatedDevotee) {
+      return res.status(404).json({
+        success: false,
+        message: "Devotee account not found.",
+      });
+    }
 
-    await devotee.save();
     if (malasToAdd > 0) {
       await recordDailyLeaderboardEntry({
-        devoteeId: devotee._id,
-        name: devotee.name,
+        devoteeId: updatedDevotee._id,
+        name: updatedDevotee.name,
         date: today,
-        completedMalas: devotee.dailyCompletedMalas,
+        completedMalas: updatedDevotee.dailyCompletedMalas,
       });
     }
 
@@ -59,12 +113,12 @@ router.post("/sync", protect, async (req, res) => {
       success: true,
       message: "Jap sadhana synced successfully",
       devotee: {
-        name: devotee.name,
-        todayCompletedMalas: devotee.dailyCompletedMalas,
-        completedMalas: devotee.completedMalas,
-        lifetimeJap: devotee.lifetimeJap,
-        japScore: devotee.japScore,
-        totalScore: devotee.totalScore,
+        name: updatedDevotee.name,
+        todayCompletedMalas: updatedDevotee.dailyCompletedMalas,
+        completedMalas: updatedDevotee.completedMalas,
+        lifetimeJap: updatedDevotee.lifetimeJap,
+        japScore: updatedDevotee.japScore,
+        totalScore: updatedDevotee.totalScore,
       },
     });
   } catch (error) {
@@ -80,19 +134,37 @@ router.get("/stats", protect, async (req, res) => {
     const today = getLocalDateString();
 
     if (devotee.lastJapDate !== today) {
-      devotee.dailyCompletedMalas = 0;
-      devotee.lastJapDate = today;
-      devotee.japScore = 0;
-      devotee.totalScore = devotee.dailyQuizScore || 0;
-      await devotee.save();
+      await Devotee.updateOne(
+        { _id: devotee._id, lastJapDate: { $ne: today } },
+        [
+          {
+            $set: {
+              dailyCompletedMalas: 0,
+              lastJapDate: today,
+              japScore: 0,
+              totalScore: {
+                $cond: [
+                  { $eq: ["$lastQuizDate", today] },
+                  { $ifNull: ["$dailyQuizScore", 0] },
+                  0,
+                ],
+              },
+            },
+          },
+        ],
+      );
     }
+
+    const currentDevotee = await Devotee.findById(devotee._id)
+      .select("dailyCompletedMalas completedMalas lifetimeJap japScore")
+      .lean();
 
     res.json({
       success: true,
-      todayCompletedMalas: devotee.dailyCompletedMalas || 0,
-      completedMalas: devotee.completedMalas || 0,
-      lifetimeJap: devotee.lifetimeJap || 0,
-      japScore: devotee.japScore || 0,
+      todayCompletedMalas: currentDevotee?.dailyCompletedMalas || 0,
+      completedMalas: currentDevotee?.completedMalas || 0,
+      lifetimeJap: currentDevotee?.lifetimeJap || 0,
+      japScore: currentDevotee?.japScore || 0,
     });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
