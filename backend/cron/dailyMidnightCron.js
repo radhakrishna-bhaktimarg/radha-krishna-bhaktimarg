@@ -14,10 +14,11 @@ const getDateString = (daysOffset = 0) => {
 };
 
 // Snapshot generator & day reset logic
-const runDailyMidnightRollover = async () => {
+const runDailyMidnightRollover = async (assertLock) => {
   try {
     const yesterday = getDateString(-1);
     const today = getDateString(0);
+    assertLock?.();
 
     console.log(
       `⏰ [CRON] Starting Daily Midnight Leaderboard Rollover for ${yesterday}...`,
@@ -29,6 +30,7 @@ const runDailyMidnightRollover = async () => {
     }).lean();
 
     if (existingSnapshot) {
+      assertLock?.();
       await DailyLeaderboard.updateOne(
         { date: yesterday },
         { $set: { isFinalized: true } },
@@ -41,6 +43,7 @@ const runDailyMidnightRollover = async () => {
         "name lastQuizDate dailyQuizAttempts dailyQuizScore dailyQuizTimeTaken lastJapDate dailyCompletedMalas",
       )
       .lean();
+    assertLock?.();
 
     const legacyRankings = devotees
       .map((d) => {
@@ -128,12 +131,14 @@ const runDailyMidnightRollover = async () => {
       { date: yesterday, rankings: mergedRankings, isFinalized: true },
       { upsert: true, new: true, setDefaultsOnInsert: true },
     );
+    assertLock?.();
 
     console.log(
       `✅ [CRON] DailyLeaderboard snapshot archived for ${yesterday} (${existingSnapshot?.rankings?.length || legacyRankings.length} devotees).`,
     );
 
     // 3. Reset daily metrics on all devotees for the new day
+    assertLock?.();
     const resetResult = await Devotee.updateMany(
       { role: "devotee" },
       [
@@ -190,6 +195,7 @@ const runDailyMidnightRollover = async () => {
         },
       ],
     );
+    assertLock?.();
 
     console.log(
       `🌅 [CRON] New day (${today}) started. Reset ${resetResult.modifiedCount} devotee daily scores.`,

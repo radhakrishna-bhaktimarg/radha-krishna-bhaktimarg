@@ -52,9 +52,10 @@ const releaseLeaderboardLock = async (token) => {
 
 const withLeaderboardLock = async (callback) => {
   const token = await acquireLeaderboardLock();
+  let lockLost = false;
   const renewal = setInterval(async () => {
     try {
-      await LeaderboardLock.updateOne(
+      const result = await LeaderboardLock.updateOne(
         {
           key: LOCK_KEY,
           token,
@@ -62,12 +63,26 @@ const withLeaderboardLock = async (callback) => {
         },
         { $set: { lockedUntil: new Date(Date.now() + LOCK_TTL_MS) } },
       );
+      if (result.modifiedCount !== 1) {
+        lockLost = true;
+      }
     } catch (error) {
+      lockLost = true;
       console.error("Leaderboard lock renewal failed:", error.message);
     }
   }, LOCK_RENEWAL_MS);
+  const assertLock = () => {
+    if (lockLost) {
+      const error = new Error(
+        "Leaderboard lock was lost; this operation must be retried.",
+      );
+      error.code = "LEADERBOARD_LOCK_LOST";
+      throw error;
+    }
+  };
   try {
-    return await callback();
+    assertLock();
+    return await callback(assertLock);
   } finally {
     clearInterval(renewal);
     await releaseLeaderboardLock(token);

@@ -46,8 +46,10 @@ const recordDailyLeaderboardEntry = async ({
   quizTimeTaken,
   completedMalas,
   japActivityVersion,
+  assertLock,
 }) => {
   for (let attempt = 0; attempt < 5; attempt += 1) {
+    assertLock?.();
     let snapshot = await DailyLeaderboard.findOne({ date });
 
     if (!snapshot) {
@@ -111,6 +113,7 @@ const recordDailyLeaderboardEntry = async ({
     if (existingIndex >= 0) rankings[existingIndex] = entry;
     else rankings.push(entry);
 
+    assertLock?.();
     const result = await DailyLeaderboard.updateOne(
       { _id: snapshot._id, __v: snapshot.__v || 0, isFinalized: false },
       {

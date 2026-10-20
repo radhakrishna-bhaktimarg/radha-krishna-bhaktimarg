@@ -18,7 +18,7 @@ const getLocalDateString = () => {
 
 // @route   POST /api/jap/sync
 // @desc    Increment completed mala and lifetime beads by delta
-const syncJap = async (req, res) => {
+const syncJap = async (req, res, assertLock) => {
   try {
     const { deltaMalas, deltaBeads, operationId } = req.body;
     const devotee = req.user;
@@ -153,6 +153,7 @@ const syncJap = async (req, res) => {
       date: today,
       completedMalas: updatedDevotee.dailyCompletedMalas,
       japActivityVersion: updatedDevotee.japActivityVersion,
+      assertLock,
     });
 
     res.status(200).json({
@@ -176,10 +177,15 @@ const syncJap = async (req, res) => {
 
 router.post("/sync", protect, async (req, res) => {
   try {
-    return await withLeaderboardLock(() => syncJap(req, res));
+    return await withLeaderboardLock((assertLock) =>
+      syncJap(req, res, assertLock),
+    );
   } catch (error) {
     const statusCode =
-      error.code === "LEADERBOARD_LOCK_TIMEOUT" ? 503 : 500;
+      error.code === "LEADERBOARD_LOCK_TIMEOUT" ||
+      error.code === "LEADERBOARD_LOCK_LOST"
+        ? 503
+        : 500;
     return res
       .status(statusCode)
       .json({ success: false, message: error.message });

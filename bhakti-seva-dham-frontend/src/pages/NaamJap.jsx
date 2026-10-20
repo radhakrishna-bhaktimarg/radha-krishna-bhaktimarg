@@ -27,6 +27,7 @@ export default function NaamJap() {
   const [lifetimeJap, setLifetimeJap] = useState(0);
   const [syncError, setSyncError] = useState("");
   const pendingSyncRef = useRef([]);
+  const processingSyncRef = useRef(false);
 
   const [audioEnabled, setAudioEnabled] = useState(true);
   const [targetMala, setTargetMala] = useState(1);
@@ -38,8 +39,27 @@ export default function NaamJap() {
     return devotee?.token || (storedUser ? JSON.parse(storedUser).token : null);
   };
 
+  const getPendingSyncStorageKey = () =>
+    `bhakti_pending_jap_${devotee?._id || devotee?.id || "guest"}`;
+
+  const persistPendingSync = () => {
+    localStorage.setItem(
+      getPendingSyncStorageKey(),
+      JSON.stringify(pendingSyncRef.current),
+    );
+  };
+
   // Fetch current database totals on mount
   useEffect(() => {
+    try {
+      const savedPending = JSON.parse(
+        localStorage.getItem(getPendingSyncStorageKey()) || "[]",
+      );
+      pendingSyncRef.current = Array.isArray(savedPending) ? savedPending : [];
+    } catch {
+      pendingSyncRef.current = [];
+    }
+
     const fetchLatestStats = async () => {
       const token = getToken();
       if (!token) return;
@@ -61,10 +81,13 @@ export default function NaamJap() {
       setUserName(devotee.name);
     }
     fetchLatestStats();
+    if (pendingSyncRef.current.length > 0) {
+      setTimeout(() => processPendingSync(), 0);
+    }
   }, [devotee]);
 
   // Send delta (+1 mala or -1 mala) to backend
-  const syncDeltaWithBackend = async (
+  const sendSyncOperation = async (
     deltaMalas,
     deltaBeads,
     operationId,
@@ -94,6 +117,7 @@ export default function NaamJap() {
         (pending) => pending.operationId !== operationId,
       );
       pendingSyncRef.current = remainingPending;
+      persistPendingSync();
       if (remainingPending.length === 0) {
         setSyncError("");
       }
@@ -108,11 +132,41 @@ export default function NaamJap() {
           ...pendingSyncRef.current,
           { deltaMalas, deltaBeads, operationId },
         ];
+        persistPendingSync();
       }
       setSyncError(
         "Points sync nahi ho paye. Retry karein; current action dobara count nahi hoga.",
       );
     }
+  };
+
+  const processPendingSync = async () => {
+    if (processingSyncRef.current) return;
+    processingSyncRef.current = true;
+    try {
+      while (pendingSyncRef.current.length > 0) {
+        const pending = pendingSyncRef.current[0];
+        await sendSyncOperation(
+          pending.deltaMalas,
+          pending.deltaBeads,
+          pending.operationId,
+        );
+        if (pendingSyncRef.current[0]?.operationId === pending.operationId) {
+          return;
+        }
+      }
+    } finally {
+      processingSyncRef.current = false;
+    }
+  };
+
+  const enqueueSync = (deltaMalas, deltaBeads) => {
+    pendingSyncRef.current = [
+      ...pendingSyncRef.current,
+      { deltaMalas, deltaBeads, operationId: createOperationId() },
+    ];
+    persistPendingSync();
+    processPendingSync();
   };
 
   const createOperationId = () =>
@@ -121,9 +175,7 @@ export default function NaamJap() {
       : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
   const retrySync = () => {
-    pendingSyncRef.current.forEach(({ deltaMalas, deltaBeads, operationId }) =>
-      syncDeltaWithBackend(deltaMalas, deltaBeads, operationId),
-    );
+    processPendingSync();
   };
 
   const playChantTone = (isCompletion = false) => {
@@ -181,7 +233,7 @@ export default function NaamJap() {
       setTodayMalas((prev) => prev + 1);
       playChantTone(true);
       // Increment 1 mala and 108 beads in database
-      syncDeltaWithBackend(1, 108, createOperationId());
+      enqueueSync(1, 108);
     } else {
       setBeadCount(nextBead);
       playChantTone(false);
@@ -197,7 +249,7 @@ export default function NaamJap() {
       setBeadCount(107);
       setLifetimeJap((prev) => Math.max(0, prev - 1));
       // Decrement 1 mala and 1 bead in database
-      syncDeltaWithBackend(-1, -1, createOperationId());
+      enqueueSync(-1, -1);
     }
   };
 
