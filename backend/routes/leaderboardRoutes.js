@@ -114,6 +114,13 @@ router.get("/", async (req, res) => {
       { label: getDateString(-2), value: getDateString(-2) },
       { label: getDateString(-3), value: getDateString(-3) },
     ];
+    const supportedDates = new Set(availableDates.map(({ value }) => value));
+    if (!supportedDates.has(requestedDate)) {
+      return res.status(400).json({
+        success: false,
+        message: "Leaderboard date is not available.",
+      });
+    }
 
     // Case 1: Live Today's Leaderboard
     if (isLiveToday) {
@@ -234,6 +241,9 @@ router.get("/", async (req, res) => {
         return a.quizTimeTaken - b.quizTimeTaken;
       }
       return b.completedMalas - a.completedMalas;
+    });
+    formattedPast.forEach((entry, index) => {
+      entry.rank = index + 1;
     });
     const paginatedPast = formattedPast.slice(offset, offset + limit);
 

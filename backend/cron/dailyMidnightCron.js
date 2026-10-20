@@ -78,13 +78,54 @@ const executeDailyMidnightRollover = async () => {
       })
       .map((item, idx) => ({ ...item, rank: idx + 1 }));
 
-    if (!existingSnapshot) {
-      await DailyLeaderboard.findOneAndUpdate(
-        { date: yesterday },
-        { date: yesterday, rankings: legacyRankings, isFinalized: true },
-        { upsert: true, new: true, setDefaultsOnInsert: true },
+    const mergedRankings = [...(existingSnapshot?.rankings || [])];
+    legacyRankings.forEach((legacyEntry) => {
+      const index = mergedRankings.findIndex(
+        (entry) =>
+          entry.devoteeId.toString() === legacyEntry.devoteeId.toString(),
       );
-    }
+      if (index === -1) {
+        mergedRankings.push(legacyEntry);
+        return;
+      }
+
+      const existingEntry = mergedRankings[index];
+      mergedRankings[index] = {
+        ...existingEntry,
+        quizScore: legacyEntry.quizScore || existingEntry.quizScore || 0,
+        quizTimeTaken:
+          legacyEntry.quizTimeTaken < 999999
+            ? legacyEntry.quizTimeTaken
+            : existingEntry.quizTimeTaken || 999999,
+        completedMalas: Math.max(
+          existingEntry.completedMalas || 0,
+          legacyEntry.completedMalas || 0,
+        ),
+      };
+      mergedRankings[index].japPoints =
+        mergedRankings[index].completedMalas * 5;
+      mergedRankings[index].combinedScore =
+        mergedRankings[index].quizScore + mergedRankings[index].japPoints;
+    });
+
+    mergedRankings.sort((a, b) => {
+      if (b.combinedScore !== a.combinedScore) {
+        return b.combinedScore - a.combinedScore;
+      }
+      if (a.quizTimeTaken !== b.quizTimeTaken) {
+        return a.quizTimeTaken - b.quizTimeTaken;
+      }
+      return b.completedMalas - a.completedMalas;
+    });
+    mergedRankings.forEach((entry, index) => {
+      entry.rank = index + 1;
+    });
+
+    await DailyLeaderboard.findOneAndUpdate(
+      { date: yesterday },
+      { date: yesterday, rankings: mergedRankings, isFinalized: true },
+      { upsert: true, new: true, setDefaultsOnInsert: true },
+    );
 
     console.log(
       `✅ [CRON] DailyLeaderboard snapshot archived for ${yesterday} (${existingSnapshot?.rankings?.length || legacyRankings.length} devotees).`,

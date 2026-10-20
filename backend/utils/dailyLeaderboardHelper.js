@@ -80,7 +80,7 @@ const recordDailyLeaderboardEntry = async ({
           : existing.quizTimeTaken || 999999,
       completedMalas:
         completedMalas !== undefined
-          ? completedMalas
+          ? Math.max(existing.completedMalas || 0, completedMalas)
           : existing.completedMalas || 0,
     };
     entry.japPoints = entry.completedMalas * 5;

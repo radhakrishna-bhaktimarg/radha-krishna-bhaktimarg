@@ -18,21 +18,31 @@ const getLocalDateString = () => {
 // @desc    Increment completed mala and lifetime beads by delta
 router.post("/sync", protect, async (req, res) => {
   try {
-    const { deltaMalas, deltaBeads } = req.body;
+    const { deltaMalas, deltaBeads, operationId } = req.body;
     const devotee = req.user;
     const today = getLocalDateString();
 
     const malasToAdd = Number(deltaMalas) || 0;
     const beadsToAdd = Number(deltaBeads) || 0;
-    if (!Number.isFinite(malasToAdd) || !Number.isFinite(beadsToAdd)) {
+    if (
+      !operationId ||
+      typeof operationId !== "string" ||
+      operationId.length > 100 ||
+      !Number.isInteger(malasToAdd) ||
+      !Number.isInteger(beadsToAdd) ||
+      !(
+        (malasToAdd === 1 && beadsToAdd === 108) ||
+        (malasToAdd === -1 && beadsToAdd === -1)
+      )
+    ) {
       return res.status(400).json({
         success: false,
         message: "Invalid Naam Jap sync values.",
       });
     }
 
-    const updatedDevotee = await Devotee.findByIdAndUpdate(
-      devotee._id,
+    const updatedDevotee = await Devotee.findOneAndUpdate(
+      { _id: devotee._id, japOperationIds: { $ne: operationId } },
       [
         {
           $set: {
@@ -70,6 +80,12 @@ router.post("/sync", protect, async (req, res) => {
               ],
             },
             lastJapDate: today,
+            japOperationIds: {
+              $slice: [
+                { $concatArrays: [{ $ifNull: ["$japOperationIds", []] }, [operationId]] },
+                -100,
+              ],
+            },
           },
         },
         {
@@ -94,6 +110,23 @@ router.post("/sync", protect, async (req, res) => {
     ).select("-password");
 
     if (!updatedDevotee) {
+      const existingDevotee = await Devotee.findById(devotee._id)
+        .select("-password")
+        .lean();
+      if (existingDevotee?.japOperationIds?.includes(operationId)) {
+        return res.status(200).json({
+          success: true,
+          message: "Naam Jap sync already processed.",
+          devotee: {
+            name: existingDevotee.name,
+            todayCompletedMalas: existingDevotee.dailyCompletedMalas,
+            completedMalas: existingDevotee.completedMalas,
+            lifetimeJap: existingDevotee.lifetimeJap,
+            japScore: existingDevotee.japScore,
+            totalScore: existingDevotee.totalScore,
+          },
+        });
+      }
       return res.status(404).json({
         success: false,
         message: "Devotee account not found.",

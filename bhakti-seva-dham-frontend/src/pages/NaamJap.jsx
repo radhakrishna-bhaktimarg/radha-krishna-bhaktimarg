@@ -67,13 +67,17 @@ export default function NaamJap() {
     if (!token) return;
 
     try {
+      const operationId =
+        typeof globalThis.crypto?.randomUUID === "function"
+          ? globalThis.crypto.randomUUID()
+          : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
       const res = await fetch(`${API_BASE_URL}/jap/sync`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ deltaMalas, deltaBeads }),
+        body: JSON.stringify({ deltaMalas, deltaBeads, operationId }),
       });
 
       const data = await res.json();

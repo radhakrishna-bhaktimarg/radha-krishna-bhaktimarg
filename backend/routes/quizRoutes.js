@@ -200,6 +200,7 @@ router.post("/submit-daily", protect, async (req, res) => {
     }
 
     let correctCount = 0;
+    const answeredQuestions = new Set();
 
     // Flexible answer evaluation: Matches by ID or question array index
     (answers || []).forEach((ans, fallbackIndex) => {
@@ -216,6 +217,11 @@ router.post("/submit-daily", protect, async (req, res) => {
           ans.questionIndex !== undefined ? ans.questionIndex : fallbackIndex;
         targetQ = katha.questions[qIdx];
       }
+
+      const questionIndex = targetQ ? katha.questions.indexOf(targetQ) : -1;
+      const questionKey = `index:${questionIndex}`;
+      if (!targetQ || answeredQuestions.has(questionKey)) return;
+      answeredQuestions.add(questionKey);
 
       if (
         targetQ &&
