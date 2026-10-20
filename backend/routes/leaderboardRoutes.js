@@ -29,8 +29,14 @@ const confirmedRecoveryEntries = {
 };
 
 const applyConfirmedRecovery = async (snapshot) => {
+  if (!snapshot) return snapshot;
+  const snapshotDocument = await DailyLeaderboard.findOne({
+    date: snapshot.date,
+  });
+  if (!snapshotDocument) return snapshot;
+
   let changed = false;
-  snapshot.rankings.forEach((ranking) => {
+  snapshotDocument.rankings.forEach((ranking) => {
     const completedMalas = confirmedRecoveryEntries[
       ranking.devoteeId.toString()
     ];
@@ -43,9 +49,9 @@ const applyConfirmedRecovery = async (snapshot) => {
     }
   });
 
-  if (!changed) return snapshot;
+  if (!changed) return snapshotDocument.toObject();
 
-  snapshot.rankings.sort((a, b) => {
+  snapshotDocument.rankings.sort((a, b) => {
     if (b.combinedScore !== a.combinedScore) {
       return b.combinedScore - a.combinedScore;
     }
@@ -54,11 +60,11 @@ const applyConfirmedRecovery = async (snapshot) => {
     }
     return b.completedMalas - a.completedMalas;
   });
-  snapshot.rankings.forEach((ranking, index) => {
+  snapshotDocument.rankings.forEach((ranking, index) => {
     ranking.rank = index + 1;
   });
-  snapshot.isFinalized = true;
-  return snapshot.save();
+  snapshotDocument.isFinalized = true;
+  return snapshotDocument.save();
 };
 
 /*
