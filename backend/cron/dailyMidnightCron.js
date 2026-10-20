@@ -92,7 +92,7 @@ const executeDailyMidnightRollover = async () => {
 
     // 3. Reset daily metrics on all devotees for the new day
     const resetResult = await Devotee.updateMany(
-      {},
+      { role: "devotee" },
       {
         $set: {
           dailyQuizScore: 0,

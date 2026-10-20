@@ -46,44 +46,61 @@ const recordDailyLeaderboardEntry = async ({
   quizTimeTaken,
   completedMalas,
 }) => {
-  const snapshot = await DailyLeaderboard.findOne({ date }).lean();
-  const rankings = [...(snapshot?.rankings || [])];
-  const existingIndex = rankings.findIndex(
-    (ranking) => ranking.devoteeId.toString() === devoteeId.toString(),
-  );
-  const existing = existingIndex >= 0 ? rankings[existingIndex] : {};
-  const quizHasBeenPlayed = quizScore !== undefined;
-  const malasHaveBeenCompleted = completedMalas !== undefined;
-  const entry = {
-    devoteeId,
-    name,
-    quizScore: quizHasBeenPlayed
-      ? quizScore
-      : existing.quizScore || 0,
-    quizTimeTaken: quizHasBeenPlayed
-      ? quizTimeTaken
-      : existing.quizTimeTaken || 999999,
-    completedMalas: malasHaveBeenCompleted
-      ? completedMalas
-      : existing.completedMalas || 0,
-  };
-  entry.japPoints = entry.completedMalas * 5;
-  entry.combinedScore = entry.quizScore + entry.japPoints;
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    let snapshot = await DailyLeaderboard.findOne({ date });
 
-  if (existingIndex >= 0) {
-    rankings[existingIndex] = entry;
-  } else {
-    rankings.push(entry);
+    if (!snapshot) {
+      try {
+        snapshot = await DailyLeaderboard.create({
+          date,
+          rankings: [],
+          isFinalized: false,
+        });
+      } catch (error) {
+        if (error?.code === 11000) continue;
+        throw error;
+      }
+    }
+
+    if (snapshot.isFinalized) return;
+
+    const rankings = snapshot.rankings.map((ranking) => ranking.toObject());
+    const existingIndex = rankings.findIndex(
+      (ranking) => ranking.devoteeId.toString() === devoteeId.toString(),
+    );
+    const existing = existingIndex >= 0 ? rankings[existingIndex] : {};
+    const entry = {
+      devoteeId,
+      name,
+      quizScore:
+        quizScore !== undefined ? quizScore : existing.quizScore || 0,
+      quizTimeTaken:
+        quizTimeTaken !== undefined
+          ? quizTimeTaken
+          : existing.quizTimeTaken || 999999,
+      completedMalas:
+        completedMalas !== undefined
+          ? completedMalas
+          : existing.completedMalas || 0,
+    };
+    entry.japPoints = entry.completedMalas * 5;
+    entry.combinedScore = entry.quizScore + entry.japPoints;
+
+    if (existingIndex >= 0) rankings[existingIndex] = entry;
+    else rankings.push(entry);
+
+    const result = await DailyLeaderboard.updateOne(
+      { _id: snapshot._id, __v: snapshot.__v || 0, isFinalized: false },
+      {
+        $set: { rankings: sortRankings(rankings) },
+        $inc: { __v: 1 },
+      },
+    );
+    if (result.modifiedCount === 1) return;
   }
 
-  await DailyLeaderboard.findOneAndUpdate(
-    { date },
-    {
-      date,
-      rankings: sortRankings(rankings),
-      isFinalized: false,
-    },
-    { upsert: true, new: true, setDefaultsOnInsert: true },
+  throw new Error(
+    `Could not record leaderboard activity for ${devoteeId} after concurrent updates.`,
   );
 };
 
