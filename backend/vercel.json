@@ -9,7 +9,7 @@
   "crons": [
     {
       "path": "/api/leaderboard/cron/rollover",
-      "schedule": "0 18 * * *"
+      "schedule": "30 18 * * *"
     }
   ]
 }

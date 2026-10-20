@@ -243,7 +243,7 @@ Background playback and lock-screen behavior depend on the browser, operating sy
 3. Confirm the deployment exposes the API under `/api`.
 4. Confirm the frontend production API URL points to the deployed backend.
 
-The backend includes a Vercel rewrite configuration for `/api/*` requests and a scheduled rollover at `18:00 UTC` (midnight in Asia/Kolkata). Vercel authenticates that request with `CRON_SECRET`. The rollover also runs as a guarded fallback when a user opens Naam Jap after a missed schedule.
+The backend includes a Vercel rewrite configuration for `/api/*` requests and a scheduled rollover at `18:30 UTC` (midnight in Asia/Kolkata). Vercel authenticates that request with `CRON_SECRET`. The rollover also runs as a guarded fallback when a user opens Naam Jap after a missed schedule.
 
 ## Security and Configuration Notes
 
