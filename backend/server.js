@@ -1,9 +1,9 @@
 const dotenv = require("dotenv");
+dotenv.config();
+
 const connectDB = require("./config/db");
 const { startMidnightCron } = require("./cron/dailyMidnightCron");
 const app = require("./app");
-
-dotenv.config();
 
 connectDB().catch(() => {
   process.exit(1);

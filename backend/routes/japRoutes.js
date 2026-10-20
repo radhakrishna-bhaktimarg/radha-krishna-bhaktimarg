@@ -2,6 +2,7 @@ const express = require("express");
 const router = express.Router();
 const Devotee = require("../models/Devotee");
 const authMiddleware = require("../middleware/authMiddleware");
+const { executeDailyMidnightRollover } = require("../cron/dailyMidnightCron");
 const {
   recordDailyLeaderboardEntry,
   getAppDateString,
@@ -86,6 +87,9 @@ router.post("/sync", protect, async (req, res) => {
                 -100,
               ],
             },
+            japActivityVersion: {
+              $add: [{ $ifNull: ["$japActivityVersion", 0] }, 1],
+            },
           },
         },
         {
@@ -114,6 +118,15 @@ router.post("/sync", protect, async (req, res) => {
         .select("-password")
         .lean();
       if (existingDevotee?.japOperationIds?.includes(operationId)) {
+        if (existingDevotee.lastJapDate === today) {
+          await recordDailyLeaderboardEntry({
+            devoteeId: existingDevotee._id,
+            name: existingDevotee.name,
+            date: today,
+            completedMalas: existingDevotee.dailyCompletedMalas,
+            japActivityVersion: existingDevotee.japActivityVersion,
+          });
+        }
         return res.status(200).json({
           success: true,
           message: "Naam Jap sync already processed.",
@@ -133,14 +146,13 @@ router.post("/sync", protect, async (req, res) => {
       });
     }
 
-    if (malasToAdd > 0) {
-      await recordDailyLeaderboardEntry({
-        devoteeId: updatedDevotee._id,
-        name: updatedDevotee.name,
-        date: today,
-        completedMalas: updatedDevotee.dailyCompletedMalas,
-      });
-    }
+    await recordDailyLeaderboardEntry({
+      devoteeId: updatedDevotee._id,
+      name: updatedDevotee.name,
+      date: today,
+      completedMalas: updatedDevotee.dailyCompletedMalas,
+      japActivityVersion: updatedDevotee.japActivityVersion,
+    });
 
     res.status(200).json({
       success: true,
@@ -155,7 +167,9 @@ router.post("/sync", protect, async (req, res) => {
       },
     });
   } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+    const statusCode =
+      error.code === "LEADERBOARD_FINALIZED" ? 409 : 503;
+    res.status(statusCode).json({ success: false, message: error.message });
   }
 });
 
@@ -167,6 +181,7 @@ router.get("/stats", protect, async (req, res) => {
     const today = getLocalDateString();
 
     if (devotee.lastJapDate !== today) {
+      await executeDailyMidnightRollover();
       await Devotee.updateOne(
         { _id: devotee._id, lastJapDate: { $ne: today } },
         [
@@ -200,7 +215,9 @@ router.get("/stats", protect, async (req, res) => {
       japScore: currentDevotee?.japScore || 0,
     });
   } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+    const statusCode =
+      error.code === "LEADERBOARD_FINALIZED" ? 409 : 503;
+    res.status(statusCode).json({ success: false, message: error.message });
   }
 });
 

@@ -5,5 +5,11 @@
       "source": "/api/:path*",
       "destination": "/api"
     }
+  ],
+  "crons": [
+    {
+      "path": "/api/leaderboard/cron/rollover",
+      "schedule": "0 18 * * *"
+    }
   ]
 }

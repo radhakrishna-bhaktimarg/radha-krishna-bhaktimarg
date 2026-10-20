@@ -45,6 +45,7 @@ const recordDailyLeaderboardEntry = async ({
   quizScore,
   quizTimeTaken,
   completedMalas,
+  japActivityVersion,
 }) => {
   for (let attempt = 0; attempt < 5; attempt += 1) {
     let snapshot = await DailyLeaderboard.findOne({ date });
@@ -62,13 +63,30 @@ const recordDailyLeaderboardEntry = async ({
       }
     }
 
-    if (snapshot.isFinalized) return;
+    if (snapshot.isFinalized) {
+      const error = new Error(
+        `Leaderboard snapshot for ${date} is already finalized.`,
+      );
+      error.code = "LEADERBOARD_FINALIZED";
+      throw error;
+    }
 
     const rankings = snapshot.rankings.map((ranking) => ranking.toObject());
     const existingIndex = rankings.findIndex(
       (ranking) => ranking.devoteeId.toString() === devoteeId.toString(),
     );
     const existing = existingIndex >= 0 ? rankings[existingIndex] : {};
+    const incomingJapVersion =
+      Number.isInteger(japActivityVersion) && japActivityVersion >= 0
+        ? japActivityVersion
+        : null;
+    const existingJapVersion = Number.isInteger(existing.japActivityVersion)
+      ? existing.japActivityVersion
+      : 0;
+    const canApplyJapCount =
+      completedMalas === undefined ||
+      incomingJapVersion === null ||
+      incomingJapVersion >= existingJapVersion;
     const entry = {
       devoteeId,
       name,
@@ -79,9 +97,13 @@ const recordDailyLeaderboardEntry = async ({
           ? quizTimeTaken
           : existing.quizTimeTaken || 999999,
       completedMalas:
-        completedMalas !== undefined
-          ? Math.max(existing.completedMalas || 0, completedMalas)
+        canApplyJapCount && completedMalas !== undefined
+          ? completedMalas
           : existing.completedMalas || 0,
+      japActivityVersion:
+        incomingJapVersion !== null && canApplyJapCount
+          ? incomingJapVersion
+          : existingJapVersion,
     };
     entry.japPoints = entry.completedMalas * 5;
     entry.combinedScore = entry.quizScore + entry.japPoints;

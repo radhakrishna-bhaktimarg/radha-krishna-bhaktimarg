@@ -10,6 +10,7 @@ const devoteeRankSchema = new mongoose.Schema({
   quizScore: { type: Number, default: 0 },
   quizTimeTaken: { type: Number, default: 999999 }, // Duration in seconds
   completedMalas: { type: Number, default: 0 },
+  japActivityVersion: { type: Number, default: 0 },
   japPoints: { type: Number, default: 0 }, // malas * 5
   combinedScore: { type: Number, default: 0 }, // quizScore + japPoints
   rank: { type: Number, required: true },

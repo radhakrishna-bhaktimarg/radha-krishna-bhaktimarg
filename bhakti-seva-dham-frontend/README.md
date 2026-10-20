@@ -129,6 +129,7 @@ PORT=5000
 MONGO_URI=mongodb+srv://<username>:<password>@<cluster>/<database>
 JWT_SECRET=<long-random-secret>
 APP_TIME_ZONE=Asia/Kolkata
+CRON_SECRET=<long-random-cron-secret>
 ```
 
 Add any translation-provider variables required by the translation helper in the deployment environment. Never commit `.env` files or credentials.
@@ -238,11 +239,11 @@ Background playback and lock-screen behavior depend on the browser, operating sy
 ### Backend on Vercel or Node.js hosting
 
 1. Set the backend project root to `backend`.
-2. Configure `MONGO_URI`, `JWT_SECRET`, and `APP_TIME_ZONE`.
+2. Configure `MONGO_URI`, `JWT_SECRET`, `APP_TIME_ZONE`, and `CRON_SECRET`.
 3. Confirm the deployment exposes the API under `/api`.
 4. Confirm the frontend production API URL points to the deployed backend.
 
-The backend includes a Vercel rewrite configuration for `/api/*` requests. The scheduled rollover process should also be monitored in the hosting environment because serverless platforms do not keep a process running continuously.
+The backend includes a Vercel rewrite configuration for `/api/*` requests and a scheduled rollover at `18:00 UTC` (midnight in Asia/Kolkata). Vercel authenticates that request with `CRON_SECRET`. The rollover also runs as a guarded fallback when a user opens Naam Jap after a missed schedule.
 
 ## Security and Configuration Notes
 
@@ -257,6 +258,7 @@ The backend includes a Vercel rewrite configuration for `/api/*` requests. The s
 
 - [ ] Configure production MongoDB and verify indexes
 - [ ] Configure `JWT_SECRET`
+- [ ] Configure `CRON_SECRET`
 - [ ] Configure the application timezone
 - [ ] Configure translation services, if used
 - [ ] Configure frontend production API URL

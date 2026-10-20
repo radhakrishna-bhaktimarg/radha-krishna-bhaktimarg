@@ -275,6 +275,27 @@ router.post("/admin/trigger-rollover", protect, adminOnly, async (req, res) => {
   }
 });
 
+router.get("/cron/rollover", async (req, res) => {
+  const configuredSecret = process.env.CRON_SECRET;
+  const authorization = req.get("authorization");
+  if (
+    !configuredSecret ||
+    authorization !== `Bearer ${configuredSecret}`
+  ) {
+    return res.status(401).json({
+      success: false,
+      message: "Unauthorized rollover request.",
+    });
+  }
+
+  try {
+    const result = await executeDailyMidnightRollover();
+    return res.json({ success: true, result });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: error.message });
+  }
+});
+
 // @route   POST /api/leaderboard/admin/repair-snapshot
 // @desc    Correct explicitly confirmed historical Naam Jap totals
 router.post("/admin/repair-snapshot", protect, adminOnly, async (req, res) => {

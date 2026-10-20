@@ -69,6 +69,10 @@ const devoteeSchema = new mongoose.Schema(
       type: [String],
       default: [],
     },
+    japActivityVersion: {
+      type: Number,
+      default: 0,
+    },
 
     // Cumulative / Lifetime totals
     quizScore: {
