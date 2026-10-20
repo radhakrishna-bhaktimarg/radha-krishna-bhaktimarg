@@ -90,71 +90,6 @@ const generateAndSaveSnapshot = async (targetDate, isFinalized = false) => {
   return record;
 };
 
-const repairSnapshotFromCurrentActivity = async (targetDate, snapshot) => {
-  const devotees = await Devotee.find({
-    role: "devotee",
-    $or: [
-      { lastQuizDate: targetDate, dailyQuizAttempts: { $gte: 1 } },
-      { lastJapDate: targetDate, dailyCompletedMalas: { $gt: 0 } },
-    ],
-  })
-    .select(
-      "name lastQuizDate dailyQuizAttempts dailyQuizScore dailyQuizTimeTaken lastJapDate dailyCompletedMalas",
-    )
-    .lean();
-
-  if (!devotees.length) return snapshot;
-
-  const rankings = [...(snapshot?.rankings || [])];
-  devotees.forEach((d) => {
-    const existingIndex = rankings.findIndex(
-      (ranking) => ranking.devoteeId.toString() === d._id.toString(),
-    );
-    const existing = existingIndex >= 0 ? rankings[existingIndex] : {};
-    const quizWasCompletedOnDate = d.lastQuizDate === targetDate;
-    const japWasCompletedOnDate = d.lastJapDate === targetDate;
-    const quizScore = quizWasCompletedOnDate
-      ? d.dailyQuizScore || 0
-      : existing.quizScore || 0;
-    const quizTimeTaken = quizWasCompletedOnDate
-      ? d.dailyQuizTimeTaken || 999999
-      : existing.quizTimeTaken || 999999;
-    const completedMalas = japWasCompletedOnDate
-      ? d.dailyCompletedMalas || 0
-      : existing.completedMalas || 0;
-    const entry = {
-      devoteeId: d._id,
-      name: d.name,
-      quizScore,
-      quizTimeTaken,
-      completedMalas,
-      japPoints: completedMalas * 5,
-      combinedScore: quizScore + completedMalas * 5,
-    };
-    if (existingIndex >= 0) rankings[existingIndex] = { ...existing, ...entry };
-    else rankings.push(entry);
-  });
-
-  rankings.sort((a, b) => {
-    if (b.combinedScore !== a.combinedScore) {
-      return b.combinedScore - a.combinedScore;
-    }
-    if (a.quizTimeTaken !== b.quizTimeTaken) {
-      return a.quizTimeTaken - b.quizTimeTaken;
-    }
-    return b.completedMalas - a.completedMalas;
-  });
-  rankings.forEach((ranking, index) => {
-    ranking.rank = index + 1;
-  });
-
-  return DailyLeaderboard.findOneAndUpdate(
-    { date: targetDate },
-    { date: targetDate, rankings, isFinalized: true },
-    { upsert: true, new: true, setDefaultsOnInsert: true },
-  );
-};
-
 // @route   GET /api/leaderboard?date=YYYY-MM-DD
 // @desc    Get live or historical 3-day snapshots for prize distribution
 router.get("/", async (req, res) => {
@@ -252,25 +187,17 @@ router.get("/", async (req, res) => {
       date: requestedDate,
     }).lean();
 
-    if (
+    if (!snapshot) {
+      snapshot = await generateAndSaveSnapshot(requestedDate, true);
+    } else if (
       requestedDate === getDateString(-1) &&
-      (!snapshot || !snapshot.isFinalized)
+      !snapshot.isFinalized
     ) {
       await finalizeSnapshot(requestedDate);
       snapshot = await DailyLeaderboard.findOne({
         date: requestedDate,
       }).lean();
-    } else if (!snapshot) {
-      snapshot = await generateAndSaveSnapshot(
-        requestedDate,
-        true,
-      );
     }
-
-    snapshot = await repairSnapshotFromCurrentActivity(
-      requestedDate,
-      snapshot,
-    );
 
     const formattedPast = (snapshot?.rankings || []).map((r) => ({
       _id: r.devoteeId,
