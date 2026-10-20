@@ -13,6 +13,7 @@ import ProtectedRoute from "./components/ProtectedRoute";
 import Profile from "./pages/Profile";
 import AdminDashboard from "./pages/AdminDashboard";
 import Bhajans from "./pages/Bhajans";
+import KathaBhajans from "./pages/KathaBhajans";
 import { AudioPlayerProvider } from "./context/AudioPlayerContext";
 import PersistentAudioPlayer from "./components/PersistentAudioPlayer";
 
@@ -147,6 +148,14 @@ export default function App() {
               element={
                 <ProtectedRoute>
                   <Bhajans />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/katha"
+              element={
+                <ProtectedRoute>
+                  <KathaBhajans />
                 </ProtectedRoute>
               }
             />
