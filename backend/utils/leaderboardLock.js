@@ -4,6 +4,7 @@ const LeaderboardLock = require("../models/LeaderboardLock");
 const LOCK_KEY = "daily-leaderboard";
 const LOCK_TTL_MS = 300000;
 const LOCK_WAIT_MS = 15000;
+const LOCK_RENEWAL_MS = 60000;
 
 const wait = (delayMs) =>
   new Promise((resolve) => {
@@ -51,9 +52,24 @@ const releaseLeaderboardLock = async (token) => {
 
 const withLeaderboardLock = async (callback) => {
   const token = await acquireLeaderboardLock();
+  const renewal = setInterval(async () => {
+    try {
+      await LeaderboardLock.updateOne(
+        {
+          key: LOCK_KEY,
+          token,
+          lockedUntil: { $gt: new Date() },
+        },
+        { $set: { lockedUntil: new Date(Date.now() + LOCK_TTL_MS) } },
+      );
+    } catch (error) {
+      console.error("Leaderboard lock renewal failed:", error.message);
+    }
+  }, LOCK_RENEWAL_MS);
   try {
     return await callback();
   } finally {
+    clearInterval(renewal);
     await releaseLeaderboardLock(token);
   }
 };

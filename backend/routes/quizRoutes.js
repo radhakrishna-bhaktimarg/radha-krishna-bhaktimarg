@@ -8,6 +8,7 @@ const {
   getAppDateString,
   recordDailyLeaderboardEntry,
 } = require("../utils/dailyLeaderboardHelper");
+const { withLeaderboardLock } = require("../utils/leaderboardLock");
 
 const translationJobs = new Map();
 
@@ -168,7 +169,7 @@ router.get("/today-katha", protect, async (req, res) => {
 // -------------------------------------------------------------
 // @route   POST /api/quiz/submit-daily
 // -------------------------------------------------------------
-router.post("/submit-daily", protect, async (req, res) => {
+const submitDailyQuiz = async (req, res) => {
   try {
     const { answers, timeTakenSeconds } = req.body;
     const devotee = req.user;
@@ -323,6 +324,18 @@ router.post("/submit-daily", protect, async (req, res) => {
     });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+router.post("/submit-daily", protect, async (req, res) => {
+  try {
+    return await withLeaderboardLock(() => submitDailyQuiz(req, res));
+  } catch (error) {
+    const statusCode =
+      error.code === "LEADERBOARD_LOCK_TIMEOUT" ? 503 : 500;
+    return res
+      .status(statusCode)
+      .json({ success: false, message: error.message });
   }
 });
 

@@ -26,7 +26,7 @@ export default function NaamJap() {
   const [todayMalas, setTodayMalas] = useState(0);
   const [lifetimeJap, setLifetimeJap] = useState(0);
   const [syncError, setSyncError] = useState("");
-  const pendingSyncRef = useRef(null);
+  const pendingSyncRef = useRef([]);
 
   const [audioEnabled, setAudioEnabled] = useState(true);
   const [targetMala, setTargetMala] = useState(1);
@@ -90,11 +90,25 @@ export default function NaamJap() {
         setTodayMalas(data.devotee.todayCompletedMalas);
         setLifetimeJap(data.devotee.lifetimeJap);
       }
-      pendingSyncRef.current = null;
-      setSyncError("");
+      const remainingPending = pendingSyncRef.current.filter(
+        (pending) => pending.operationId !== operationId,
+      );
+      pendingSyncRef.current = remainingPending;
+      if (remainingPending.length === 0) {
+        setSyncError("");
+      }
     } catch (err) {
       console.error("Sync delta error:", err);
-      pendingSyncRef.current = { deltaMalas, deltaBeads, operationId };
+      if (
+        !pendingSyncRef.current.some(
+          (pending) => pending.operationId === operationId,
+        )
+      ) {
+        pendingSyncRef.current = [
+          ...pendingSyncRef.current,
+          { deltaMalas, deltaBeads, operationId },
+        ];
+      }
       setSyncError(
         "Points sync nahi ho paye. Retry karein; current action dobara count nahi hoga.",
       );
@@ -107,14 +121,9 @@ export default function NaamJap() {
       : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
   const retrySync = () => {
-    const pendingSync = pendingSyncRef.current;
-    if (pendingSync) {
-      syncDeltaWithBackend(
-        pendingSync.deltaMalas,
-        pendingSync.deltaBeads,
-        pendingSync.operationId,
-      );
-    }
+    pendingSyncRef.current.forEach(({ deltaMalas, deltaBeads, operationId }) =>
+      syncDeltaWithBackend(deltaMalas, deltaBeads, operationId),
+    );
   };
 
   const playChantTone = (isCompletion = false) => {
