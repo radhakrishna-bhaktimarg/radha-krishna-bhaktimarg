@@ -22,51 +22,6 @@ const finalizeSnapshot = async (date) => {
   );
 };
 
-const confirmedRecoveryEntries = {
-  "6ad362ca9a9ec45224d23d05": 35,
-  "6ad29e26d72476f19e5db825": 11,
-  "6ad46665115ca880757f773a": 35,
-};
-
-const applyConfirmedRecovery = async (snapshot) => {
-  if (!snapshot) return snapshot;
-  const snapshotDocument = await DailyLeaderboard.findOne({
-    date: snapshot.date,
-  });
-  if (!snapshotDocument) return snapshot;
-
-  let changed = false;
-  snapshotDocument.rankings.forEach((ranking) => {
-    const completedMalas = confirmedRecoveryEntries[
-      ranking.devoteeId.toString()
-    ];
-    if (completedMalas === undefined) return;
-    if (ranking.completedMalas !== completedMalas) {
-      ranking.completedMalas = completedMalas;
-      ranking.japPoints = completedMalas * 5;
-      ranking.combinedScore = ranking.quizScore + ranking.japPoints;
-      changed = true;
-    }
-  });
-
-  if (!changed) return snapshotDocument.toObject();
-
-  snapshotDocument.rankings.sort((a, b) => {
-    if (b.combinedScore !== a.combinedScore) {
-      return b.combinedScore - a.combinedScore;
-    }
-    if (a.quizTimeTaken !== b.quizTimeTaken) {
-      return a.quizTimeTaken - b.quizTimeTaken;
-    }
-    return b.completedMalas - a.completedMalas;
-  });
-  snapshotDocument.rankings.forEach((ranking, index) => {
-    ranking.rank = index + 1;
-  });
-  snapshotDocument.isFinalized = true;
-  return snapshotDocument.save();
-};
-
 /*
  * Kept for historical snapshots created before activity was recorded directly.
  * New entries are written by the quiz and jap routes as they happen.
@@ -243,9 +198,6 @@ router.get("/", async (req, res) => {
       snapshot = await DailyLeaderboard.findOne({
         date: requestedDate,
       }).lean();
-    }
-    if (requestedDate === "2026-10-19") {
-      snapshot = await applyConfirmedRecovery(snapshot);
     }
 
     const formattedPast = (snapshot?.rankings || []).map((r) => ({
