@@ -31,12 +31,15 @@ const generateAndSaveSnapshot = async (targetDate, isFinalized = false) => {
     date: targetDate,
   }).lean();
 
-  if (recordedLeaderboard?.rankings?.length) {
-    return DailyLeaderboard.findOneAndUpdate(
-      { date: targetDate },
-      { $set: { isFinalized } },
-      { new: true },
-    );
+  if (recordedLeaderboard) {
+    if (isFinalized && !recordedLeaderboard.isFinalized) {
+      return DailyLeaderboard.findOneAndUpdate(
+        { date: targetDate, isFinalized: false },
+        { $set: { isFinalized: true } },
+        { new: true },
+      );
+    }
+    return recordedLeaderboard;
   }
 
   const devotees = await Devotee.find({ role: "devotee" })
